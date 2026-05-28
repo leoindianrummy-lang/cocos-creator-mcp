@@ -54,27 +54,17 @@ export class ComponentTools implements ToolCategory {
     getTools(): ToolDefinition[] {
         return [
             {
-                name: "component_add",
-                description: "Add a component to a node. Use cc.XXX format (e.g. 'cc.Label', 'cc.Sprite', 'cc.Button').",
+                name: "component_manage",
+                description: "Component lifecycle and class queries. Actions: 'add' (uuid, componentType), 'remove' (uuid, componentType), 'available' (list all component classes), 'enum' (uuid, componentType, property — list enum values for a component property like Layout.type).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        uuid: { type: "string", description: "Node UUID" },
-                        componentType: { type: "string", description: "Component class name (e.g. 'cc.Label')" },
+                        action: { type: "string", description: "'add' | 'remove' | 'available' | 'enum'" },
+                        uuid: { type: "string", description: "Node UUID (action=add|remove|enum)" },
+                        componentType: { type: "string", description: "Component class name (e.g. 'cc.Label', action=add|remove|enum)" },
+                        property: { type: "string", description: "Property name (action=enum)" },
                     },
-                    required: ["uuid", "componentType"],
-                },
-            },
-            {
-                name: "component_remove",
-                description: "Remove a component from a node.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node UUID" },
-                        componentType: { type: "string", description: "Component class name to remove" },
-                    },
-                    required: ["uuid", "componentType"],
+                    required: ["action"],
                 },
             },
             {
@@ -128,11 +118,6 @@ export class ComponentTools implements ToolCategory {
                 },
             },
             {
-                name: "component_get_available",
-                description: "List all available component classes that can be added to nodes.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
                 name: "component_auto_bind",
                 description: "Automatically bind @property references by matching property names to descendant node names. Searches only descendants of the target node. Validates component type existence. Supports array properties (Slot_0, Slot_1...). Mode: 'fuzzy' (default) tries exact match first, then case-insensitive; 'strict' requires exact match only.",
                 inputSchema: {
@@ -145,19 +130,6 @@ export class ComponentTools implements ToolCategory {
                         mode: { type: "string", enum: ["fuzzy", "strict"], description: "Matching mode: 'fuzzy' (default) or 'strict'" },
                     },
                     required: ["componentType"],
-                },
-            },
-            {
-                name: "component_query_enum",
-                description: "Get enum values for a component property. Useful for knowing what values Layout.type, Layout.resizeMode, etc. accept.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node UUID" },
-                        componentType: { type: "string", description: "Component class (e.g. 'cc.Layout')" },
-                        property: { type: "string", description: "Property name (e.g. 'type', 'resizeMode')" },
-                    },
-                    required: ["uuid", "componentType", "property"],
                 },
             },
         ];
@@ -179,10 +151,8 @@ export class ComponentTools implements ToolCategory {
         }
 
         switch (toolName) {
-            case "component_add":
-                return this.addComponent(args.uuid, compType);
-            case "component_remove":
-                return this.removeComponent(args.uuid, compType);
+            case "component_manage":
+                return this.handleManage(args);
             case "component_get_components":
                 return this.getComponents(args.uuid);
             case "component_set_property": {
@@ -216,18 +186,38 @@ export class ComponentTools implements ToolCategory {
                     return ok({ success: true, component: dump });
                 } catch (e: any) { return err(e.message || String(e)); }
             }
-            case "component_get_available": {
-                try {
-                    const classes = await (Editor.Message.request as any)("scene", "query-classes");
-                    return ok({ success: true, classes });
-                } catch (e: any) { return err(e.message || String(e)); }
-            }
             case "component_auto_bind":
                 return this.autoBind(args.uuid, compType, args.force ?? false, args.mode ?? "fuzzy");
-            case "component_query_enum":
-                return this.queryEnum(args.uuid, compType, args.property);
             default:
                 return err(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    /** component_manage dispatcher (v2.0.0). */
+    private async handleManage(args: Record<string, any>): Promise<ToolResult> {
+        const compType = args.componentType || args.component;
+        switch (args.action) {
+            case "add":
+                if (!args.uuid) return err("component_manage(add): 'uuid' is required");
+                if (!compType) return err("component_manage(add): 'componentType' is required");
+                return this.addComponent(args.uuid, compType);
+            case "remove":
+                if (!args.uuid) return err("component_manage(remove): 'uuid' is required");
+                if (!compType) return err("component_manage(remove): 'componentType' is required");
+                return this.removeComponent(args.uuid, compType);
+            case "available": {
+                try {
+                    const classes = await (Editor.Message.request as any)("scene", "query-classes");
+                    return ok({ success: true, action: args.action, classes });
+                } catch (e: any) { return err(e.message || String(e)); }
+            }
+            case "enum":
+                if (!args.uuid) return err("component_manage(enum): 'uuid' is required");
+                if (!compType) return err("component_manage(enum): 'componentType' is required");
+                if (!args.property) return err("component_manage(enum): 'property' is required");
+                return this.queryEnum(args.uuid, compType, args.property);
+            default:
+                return err(`Unknown component_manage action: ${args.action}. Expected add / remove / available / enum.`);
         }
     }
 

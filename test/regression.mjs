@@ -160,6 +160,14 @@ async function callTool(name, args = {}) {
                 }
             }
         }
+        // 特殊: view_focus_on_node は v1 で uuid (単数) または uuids (配列) 両受け
+        // 新 view_camera(focus_on_nodes) は uuids (配列) 必須
+        if (name === "view_focus_on_node") {
+            if (argsToSend.uuid && !argsToSend.uuids) {
+                argsToSend.uuids = [argsToSend.uuid];
+            }
+            delete argsToSend.uuid;
+        }
     }
     const res = await callMcp("tools/call", { name: toolName, arguments: argsToSend });
     if (res.error) return { _rpcError: res.error };
@@ -807,14 +815,10 @@ async function testV16NewTools() {
 async function testV18NewTools() {
     console.log("\n── v1.8 new tools (preview recorder) ──");
 
-    // 1. debug_record_start registered
+    // v2.0.0: debug_record_start / debug_record_stop は debug_record に集約済み
     const toolsList = await callMcp("tools/list", {});
-    const startTool = toolsList.result?.tools?.find((t) => t.name === "debug_record_start");
-    assert(!!startTool, "debug_record_start registered");
-
-    // 2. debug_record_stop registered
-    const stopTool = toolsList.result?.tools?.find((t) => t.name === "debug_record_stop");
-    assert(!!stopTool, "debug_record_stop registered");
+    const recordTool = toolsList.result?.tools?.find((t) => t.name === "debug_record");
+    assert(!!recordTool, "debug_record registered (v2: 旧 record_start/stop を統合)");
 }
 
 async function testV111NewTools() {
@@ -1318,12 +1322,15 @@ async function testComponentSetPropertyV2() {
         assert(rBadAsset._rpcError || rBadAsset.error || rBadAsset.success === false,
             "spriteFrame: 存在しない db:// path は error 返却");
 
-        // 12. 設定後の値検証 — Color が反映されたか query-node 経由で確認
+        // 12. 設定後の値検証 — Color が反映されたか query-component dump で確認
+        // query-component の dump は { value: { _color: { value: {r,g,b,a} } } } 階層
         const compsRes = await callTool("component_get_components", { uuid });
         const spriteComp = (compsRes.components || []).find((c) => c.type === "Sprite");
         if (spriteComp?.uuid) {
             const dump = await callTool("component_get_info", { componentUuid: spriteComp.uuid });
-            const colorVal = dump.component?._color?.value || dump.component?.color?.value;
+            const colorVal = dump.component?.value?._color?.value
+                ?? dump.component?.value?.color?.value
+                ?? dump.component?._color?.value;
             const r = colorVal?.r?.value ?? colorVal?.r;
             assert(Number(r) === 255, `Sprite.color.r === 255 (got ${r})`);
         }
@@ -1908,22 +1915,22 @@ async function testStdioBridge() {
             "bridge: initialize result");
         const toolsList = responses.find((r) => r.id === 2);
         const tools = toolsList?.result?.tools || [];
-        assert(tools.length >= 148, `bridge: tools/list count >= 148 (got ${tools.length})`);
+        assert(tools.length >= 80, `bridge: tools/list count >= 80 (v2; got ${tools.length})`);
         assert(stderr.includes("session established"),
             "bridge: session established logged");
     }
 
-    // 2. tools/call を通した実ツール呼び出し
+    // 2. tools/call を通した実ツール呼び出し (v2: scene_manage(current))
     {
         const { responses } = await runStdioBridge([
             { jsonrpc: "2.0", id: 1, method: "initialize", params: {} },
-            { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "scene_get_current", arguments: {} } },
+            { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "scene_manage", arguments: { action: "current" } } },
         ]);
         const toolRes = responses.find((r) => r.id === 2);
         assert(!!toolRes?.result, "bridge: tools/call returned result");
         const content = toolRes?.result?.content?.[0]?.text;
         const parsed = content ? JSON.parse(content) : null;
-        assert(parsed?.success === true, "bridge: scene_get_current success");
+        assert(parsed?.success === true, "bridge: scene_manage(current) success");
     }
 
     // 3. 不正 JSON を流したとき parse error を返す

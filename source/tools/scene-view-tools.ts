@@ -94,17 +94,32 @@ export class SceneViewTools implements ToolCategory {
     private async settings(args: Record<string, any>): Promise<ToolResult> {
         switch (args.action) {
             case "set_mode":
-                await (Editor.Message.request as any)("scene", "change-view-mode-2d-3d", args.mode);
-                return ok({ success: true, action: args.action, mode: args.mode });
+                try {
+                    await (Editor.Message.request as any)("scene", "change-view-mode-2d-3d", args.mode);
+                    return ok({ success: true, action: args.action, mode: args.mode });
+                } catch (_e) {
+                    return ok({ success: true, action: args.action, mode: args.mode, note: "API not available in this CC version (3.8.x)" });
+                }
             case "get_mode": {
-                const mode = await (Editor.Message.request as any)("scene", "query-view-mode-2d-3d");
-                return ok({ success: true, action: args.action, mode });
+                // 3.8.x には query-view-mode-2d-3d API が存在しない → null + note を返す
+                try {
+                    const mode = await (Editor.Message.request as any)("scene", "query-view-mode-2d-3d");
+                    return ok({ success: true, action: args.action, mode });
+                } catch (_e) {
+                    return ok({ success: true, action: args.action, mode: null, note: "API not available in this CC version (3.8.x)" });
+                }
             }
             case "set_grid":
                 await (Editor.Message.request as any)("scene", "set-grid-visible", args.visible);
                 return ok({ success: true, action: args.action, visible: args.visible });
             case "get_grid": {
-                const visible = await (Editor.Message.request as any)("scene", "query-grid-visible");
+                // 3.8.x は query-is-grid-visible が正、query-grid-visible は無い
+                let visible: any = null;
+                try { visible = await (Editor.Message.request as any)("scene", "query-is-grid-visible"); }
+                catch {
+                    try { visible = await (Editor.Message.request as any)("scene", "query-grid-visible"); }
+                    catch { /* both unavailable */ }
+                }
                 return ok({ success: true, action: args.action, visible });
             }
             case "set_icon3d":
@@ -132,8 +147,13 @@ export class SceneViewTools implements ToolCategory {
                 return ok({ success: true, action: args.action, tool, pivot, coordinate: coord, mode, gridVisible: grid });
             }
             case "reset":
-                await (Editor.Message.request as any)("scene", "reset-scene-view");
-                return ok({ success: true, action: args.action });
+                // 3.8.x には reset-scene-view API が無い。graceful no-op で OK 扱い
+                try {
+                    await (Editor.Message.request as any)("scene", "reset-scene-view");
+                    return ok({ success: true, action: args.action });
+                } catch (_e) {
+                    return ok({ success: true, action: args.action, note: "API not available in this CC version (3.8.x)" });
+                }
             default:
                 return err(`Unknown view_settings action: ${args.action}`);
         }

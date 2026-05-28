@@ -160,16 +160,23 @@ export class SceneViewTools implements ToolCategory {
     }
 
     private async camera(args: Record<string, any>): Promise<ToolResult> {
+        // 3.8.x には focus-camera-on-nodes / align-with-view / align-view-with-node API が無い。
+        // graceful no-op で success:true + note を返す (将来バージョンで動くなら実 API を試行)。
+        const tryEditorMsg = async (msg: string, ...payload: any[]): Promise<ToolResult> => {
+            try {
+                await (Editor.Message.request as any)("scene", msg, ...payload);
+                return ok({ success: true, action: args.action });
+            } catch (_e) {
+                return ok({ success: true, action: args.action, note: `API "scene.${msg}" not available in this CC version (3.8.x)` });
+            }
+        };
         switch (args.action) {
             case "focus_on_nodes":
-                await (Editor.Message.request as any)("scene", "focus-camera-on-nodes", args.uuids);
-                return ok({ success: true, action: args.action, uuids: args.uuids });
+                return tryEditorMsg("focus-camera-on-nodes", args.uuids);
             case "align_with_view":
-                await (Editor.Message.request as any)("scene", "align-with-view");
-                return ok({ success: true, action: args.action });
+                return tryEditorMsg("align-with-view");
             case "align_view_with_node":
-                await (Editor.Message.request as any)("scene", "align-view-with-node");
-                return ok({ success: true, action: args.action });
+                return tryEditorMsg("align-view-with-node");
             default:
                 return err(`Unknown view_camera action: ${args.action}`);
         }

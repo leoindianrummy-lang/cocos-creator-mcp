@@ -13,10 +13,11 @@ export const sceneCurrentResource: ResourceDef = {
     name: "Current Scene",
     description: "Name and UUID of the currently open scene.",
     async read() {
-        const scene = await (Editor.Message.request as any)("scene", "query-current-scene");
+        // query-current-scene は 3.8.x で動かないため query-node-tree のルートから取得
+        const tree = await (Editor.Message.request as any)("scene", "query-node-tree");
         return {
-            name: scene?.name,
-            uuid: scene?.uuid,
+            name: tree?.name,
+            uuid: tree?.uuid,
         };
     },
 };

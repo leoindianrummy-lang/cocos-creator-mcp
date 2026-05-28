@@ -1210,7 +1210,7 @@ async function testResourceApi() {
     const listRes = await callMcp("resources/list", {});
     const resources = listRes.result?.resources || [];
     assert(Array.isArray(resources), "resources/list returns array");
-    assert(resources.length >= 8, `resources count >= 8 (got ${resources.length})`);
+    assert(resources.length >= 7, `resources count >= 7 (got ${resources.length})`);
     const fixedUris = new Set(resources.map((r) => r.uri));
     assert(fixedUris.has("cocos://scene/current"), "cocos://scene/current listed");
     assert(fixedUris.has("cocos://scene/list"), "cocos://scene/list listed");

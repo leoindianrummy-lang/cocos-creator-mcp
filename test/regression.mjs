@@ -40,6 +40,19 @@ async function callTool(name, args = {}) {
     return text ? JSON.parse(text) : res.result;
 }
 
+/**
+ * v2.0.0: MCP resource を読み出し、JSON parse して返す。
+ * 旧 callTool での読み出し系ツール (scene_get_*, component_get_*, prefab_list/get_info,
+ * project_get_info/engine_info, asset_get_details, debug_get_editor_info 等) は
+ * Phase 1-4 で導入した cocos:// resource URI に置き換え、Phase 3-b で本体から削除。
+ */
+async function readResource(uri) {
+    const res = await callMcp("resources/read", { uri });
+    if (res.error) return { _rpcError: res.error };
+    const text = res.result?.contents?.[0]?.text;
+    return text ? JSON.parse(text) : res.result;
+}
+
 
 function assert(condition, label) {
     if (condition) {
@@ -221,8 +234,9 @@ async function testComponentTools() {
     const added = await callTool("component_manage", { action: "add", uuid, componentType: "cc.Label" });
     assert(added.success === true, "component_manage(add)");
 
-    const comps = await callTool("component_get_components", { uuid });
-    assert(comps.components?.some((c) => c.type === "Label"), "get_components");
+    const comps = await readResource(`cocos://node/${uuid}/components`);
+    assert(comps.components?.some((c) => c.type === "cc.Label" || c.type === "Label"),
+        "cocos://node/{uuid}/components contains Label");
 
     const set1 = await callTool("component_set_property", { uuid, componentType: "cc.Label", property: "string", value: "v1test" });
     assert(set1.success === true, "set_property string");
@@ -241,8 +255,8 @@ async function testPrefabTools() {
     const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
 
-    const list = await callTool("prefab_list");
-    assert(list.success === true, "list");
+    const list = await readResource("cocos://prefab/list");
+    assert(Array.isArray(list.prefabs), "cocos://prefab/list returns prefabs[]");
 
     const created = await callTool("node_manage", { action: "create", name: "PrefabV1Test", parent: canvasUuid, components: ["cc.Label"] });
     const uuid = created.uuid;
@@ -254,8 +268,8 @@ async function testPrefabTools() {
     assert(prefab.success === true, "create");
 
     if (prefab.result) {
-        const info = await callTool("prefab_get_info", { uuid: prefab.result });
-        assert(info.success === true, "get_info");
+        const info = await readResource(`cocos://prefab/${prefab.result}`);
+        assert(!info._rpcError && (info.uuid || info.url || info.name), "cocos://prefab/{uuid} returns info");
 
         const inst = await callTool("prefab_instantiate", { prefabUuid: prefab.result, parent: canvasUuid });
         assert(inst.success === true, "instantiate");
@@ -272,8 +286,9 @@ async function testPrefabTools() {
 
 async function testProjectTools() {
     console.log("\n── project tools ──");
-    const info = await callTool("project_get_info");
-    assert(info.success === true, "get_info");
+    const info = await readResource("cocos://project/info");
+    assert(!info._rpcError && typeof info.name === "string" && typeof info.path === "string",
+        "cocos://project/info has name + path");
 
     const refresh = await callTool("project_refresh_assets");
     assert(refresh.success === true || !refresh._rpcError, "refresh_assets");
@@ -322,8 +337,8 @@ async function testSceneAdvancedTools() {
     const dirty = await callTool("scene_query_dirty");
     assert(dirty.success === true || !dirty._rpcError, "query_dirty");
 
-    const tree = await callTool("scene_query_node_tree");
-    assert(tree.success === true, "query_node_tree");
+    const tree = await readResource("cocos://scene/hierarchy");
+    assert(!tree._rpcError, "cocos://scene/hierarchy readable");
 
     const classes = await callTool("scene_query_classes");
     assert(classes.success === true || !classes._rpcError, "query_classes");
@@ -362,8 +377,8 @@ async function testSceneViewTools() {
 
 async function testDebugTools() {
     console.log("\n── debug tools ──");
-    const info = await callTool("debug_get_editor_info");
-    assert(!!info.version, `editor version: ${info.version}`);
+    const info = await readResource("cocos://editor/info");
+    assert(!!info.version, `cocos://editor/info version: ${info.version}`);
 
     const msgs = await callTool("debug_list_messages", { target: "scene" });
     assert(msgs.success === true, "list_messages");
@@ -437,8 +452,8 @@ async function testComponentAdvanced() {
 
 async function testProjectAdvanced() {
     console.log("\n── project advanced tools ──");
-    const engine = await callTool("project_get_engine_info");
-    assert(engine.success === true || !engine._rpcError, "get_engine_info");
+    const engine = await readResource("cocos://project/engine");
+    assert(!engine._rpcError, "cocos://project/engine readable");
 
     const settings = await callTool("project_get_settings", { protocol: "general" });
     assert(settings.success === true || !settings._rpcError, "get_settings");
@@ -520,8 +535,8 @@ async function testNewEditorAPIs() {
     const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
     if (canvasUuid) {
-        const nodeDump = await callTool("scene_query_node", { uuid: canvasUuid });
-        assert(nodeDump.success === true || !nodeDump._rpcError, "query_node");
+        const nodeDump = await readResource(`cocos://node/${canvasUuid}`);
+        assert(!nodeDump._rpcError, "cocos://node/{uuid} readable");
     }
 
     // asset_query_ready
@@ -748,8 +763,8 @@ async function testV111NewTools() {
 
         // Prefab アセットが作成されたことを確認
         if (result.prefabAssetUuid) {
-            const info = await callTool("prefab_get_info", { uuid: result.prefabAssetUuid });
-            assert(info.success === true, "created prefab asset exists");
+            const info = await readResource(`cocos://prefab/${result.prefabAssetUuid}`);
+            assert(!info._rpcError && (info.uuid || info.url || info.name), "created prefab asset exists (resource)");
         }
 
         // クリーンアップ
@@ -806,9 +821,14 @@ async function testPrefabEfficiency() {
     });
     assert(setByName.success === true, "component_set_property by nodeName");
 
-    // 2b. component_get_components with nodeName
-    const compsByName = await callTool("component_get_components", { nodeName: "EfficiencyTestNode" });
-    assert(compsByName.components?.some((c) => c.type === "Label"), "component_get_components by nodeName");
+    // 2b. component lookup by node name (v2: nodeName → find_by_name → resource)
+    const foundByName = await callTool("node_find_by_name", { name: "EfficiencyTestNode" });
+    const efficiencyUuid = foundByName.data?.[0]?.uuid;
+    const compsByName = efficiencyUuid
+        ? await readResource(`cocos://node/${efficiencyUuid}/components`)
+        : { components: [] };
+    assert(compsByName.components?.some((c) => c.type === "cc.Label" || c.type === "Label"),
+        "node→component lookup via cocos://node/{uuid}/components");
 
     // 3. component_set_property with screenshot=true
     const setWithSS = await callTool("component_set_property", {
@@ -1089,14 +1109,14 @@ async function testDialogPrevention() {
 async function testComponentSetPropertyV2() {
     console.log("\n── component_set_property v2 value forms ──");
 
-    // setup: test node 作成 (Sprite + UITransform + Label つき)
+    // setup: test node 作成 (UITransform + Sprite つき。Label と Sprite は同ノードで衝突するので除外)
     const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
     if (!canvasUuid) { skip("Canvas not found"); return; }
 
     const created = await callTool("node_manage", { action: "create", name: "V2SetPropertyTest",
         parent: canvasUuid,
-        components: ["cc.UITransform", "cc.Sprite", "cc.Label"], });
+        components: ["cc.UITransform", "cc.Sprite"], });
     if (!created.success) { skip("create test node failed"); return; }
     const uuid = created.uuid;
 
@@ -1185,15 +1205,15 @@ async function testComponentSetPropertyV2() {
         assert(rBadAsset._rpcError || rBadAsset.error || rBadAsset.success === false,
             "spriteFrame: 存在しない db:// path は error 返却");
 
-        // 12. 設定後の値検証 — Color が反映されたか query-component dump で確認
-        // query-component の dump は { value: { _color: { value: {r,g,b,a} } } } 階層
-        const compsRes = await callTool("component_get_components", { uuid });
-        const spriteComp = (compsRes.components || []).find((c) => c.type === "Sprite");
+        // 12. 設定後の値検証 — Color が反映されたか resource 経由で確認
+        // resource cocos://node/{uuid}/components で type+uuid を取得 → cocos://component/{uuid}
+        const compsRes = await readResource(`cocos://node/${uuid}/components`);
+        const spriteComp = (compsRes.components || []).find((c) => c.type === "cc.Sprite" || c.type === "Sprite");
         if (spriteComp?.uuid) {
-            const dump = await callTool("component_get_info", { componentUuid: spriteComp.uuid });
-            const colorVal = dump.component?.value?._color?.value
-                ?? dump.component?.value?.color?.value
-                ?? dump.component?._color?.value;
+            const dump = await readResource(`cocos://component/${spriteComp.uuid}`);
+            // resource は直接 component dump を返すので component ラッパー無し
+            const colorVal = dump?.value?._color?.value
+                ?? dump?.value?.color?.value;
             const r = colorVal?.r?.value ?? colorVal?.r;
             assert(Number(r) === 255, `Sprite.color.r === 255 (got ${r})`);
         }
@@ -1508,8 +1528,15 @@ async function testUncoveredTools() {
     assert(queryBounds.success === true || !queryBounds._rpcError, "scene_query_scene_bounds");
 
     if (canvasUuid) {
-        const queryComp = await callTool("scene_query_component", { uuid: canvasUuid, componentType: "cc.UITransform" });
-        assert(queryComp.success === true || !queryComp._rpcError, "scene_query_component");
+        // v2: scene_query_component は廃止 → 一旦 node/{uuid}/components で component UUID 取得 → component/{uuid}
+        const compsForCanvas = await readResource(`cocos://node/${canvasUuid}/components`);
+        const ui = compsForCanvas.components?.find((c) => c.type === "cc.UITransform" || c.type === "UITransform");
+        if (ui?.uuid) {
+            const queryComp = await readResource(`cocos://component/${ui.uuid}`);
+            assert(!queryComp._rpcError, "cocos://component/{UITransform UUID} readable");
+        } else {
+            skip("UITransform not found on Canvas (cocos://component test)");
+        }
 
         // scene_set_parent (create two nodes, reparent, cleanup)
         const pNode = await callTool("node_manage", { action: "create", name: "ParentTest", parent: canvasUuid });

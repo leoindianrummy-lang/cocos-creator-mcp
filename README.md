@@ -530,22 +530,60 @@ After building, reload the extension in Cocos Creator:
 - Cocos Creator 3.8+
 - Node.js 18+
 
+## Value Reference Forms (v2.0.0)
+
+`component_set_property` accepts multiple convenient forms for asset references, node references, enums, and structured value types. The MCP server resolves each to the correct Editor dump format internally.
+
+### Asset references
+
+```jsonc
+// All four forms are equivalent for a SpriteFrame field:
+{ "value": "<uuid>" }                                 // raw UUID
+{ "value": "db://assets/textures/foo.png" }           // asset path string
+{ "value": { "path": "db://assets/textures/foo.png" } }  // {path}
+{ "value": { "guid": "<uuid>" } }                     // {guid}
+```
+
+### Node / component references
+
+```jsonc
+// Resolves to a node by descendant path under the active scene root:
+{ "value": "@path:Canvas/Background" }
+
+// Or pass a node UUID directly — the property type is inferred from the schema:
+{ "value": "<node-uuid>" }
+```
+
+### Enum values
+
+```jsonc
+// Name (v2.0.0) — looked up against the property's enumList:
+{ "value": "HORIZONTAL" }
+
+// Numeric (still supported):
+{ "value": 1 }
+```
+
+### Structured value types (v2.0.0)
+
+```jsonc
+// cc.Vec3 / cc.Vec2 / cc.Vec4 — pass plain coordinates:
+{ "value": { "x": 100, "y": 50, "z": 0 } }
+
+// cc.Color — RGBA in 0-255 range:
+{ "value": { "r": 255, "g": 0, "b": 0, "a": 255 } }
+
+// cc.Size — width/height (or x/y) are both accepted:
+{ "value": { "width": 200, "height": 100 } }
+```
+
+These also work inside `prefab_create_from_spec`'s `spec.properties` because the asset-ref serialization bug was fixed in v2.0.0 (properties are now reapplied via the Editor API after the node tree is built).
+
 ## Known Limitations
 
 - **`scene_create`**: Does not work on Cocos Creator 3.8.x because the underlying `scene:new-scene` Editor message is not exposed on that version. As a workaround, create the `.scene` JSON file directly under `db://assets/` and call `project_refresh_assets` so the editor picks it up. See [#13](https://github.com/harady/cocos-creator-mcp/issues/13) for details.
 
-- **`prefab_create_from_spec` — asset refs are saved as raw UUID strings**:
-  When the spec's `properties` contains asset references like `cc.Sprite.spriteFrame` or `cc.Prefab` fields, they are serialized to the generated `.prefab` as raw UUID strings instead of the required `{__uuid__, __expectedType__}` object form. The Cocos runtime fails to resolve them (e.g. `Simple.updateUVs` throws every frame for a Sprite with unresolved spriteFrame). Workaround: post-process the generated `.prefab` files to wrap asset refs.
-
-  Example fix script:
-  ```js
-  // fix-prefab-asset-refs.js — run after prefab_create_from_spec
-  const re = /"_spriteFrame":\s*"([a-f0-9\-]+(?:@[a-z0-9]+)?)"/g;
-  content = content.replace(re, (_, uuid) =>
-    `"_spriteFrame": { "__uuid__": "${uuid}", "__expectedType__": "cc.SpriteFrame" }`
-  );
-  ```
-  The same pattern also applies when setting `cc.Prefab` fields via `component_set_property` — the value object form is ignored and the raw UUID is written. Direct `.prefab` JSON edit is the reliable workaround until fixed.
+- ~~**`prefab_create_from_spec` — asset refs are saved as raw UUID strings**~~ **(fixed in v2.0.0)** — Properties in `spec.properties` are now reapplied via the Editor API (`component_set_property`) after `buildNodeTree` completes, so asset refs serialize as `{__uuid__, __expectedType__}` correctly. The old workaround of post-processing `.prefab` files is no longer needed.
 
 ## License
 

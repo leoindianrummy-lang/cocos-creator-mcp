@@ -1,6 +1,8 @@
 import http from "http";
 import { ToolCategory, ToolDefinition, JsonRpcRequest, JsonRpcResponse, ServerConfig, DEFAULT_CONFIG } from "./types";
 import { archiveOldFiles } from "./archive";
+import { ResourceRegistry } from "./resources/registry";
+import { ALL_RESOURCES } from "./resources/definitions";
 
 const MCP_PROTOCOL_VERSION = "2024-11-05";
 const SESSION_ID = `cocos-mcp-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
@@ -95,10 +97,12 @@ export class McpServer {
     private server: http.Server | null = null;
     private tools: Map<string, ToolCategory> = new Map();
     private toolIndex: Map<string, ToolCategory> = new Map(); // toolName -> category
+    private resources: ResourceRegistry = new ResourceRegistry();
     private config: ServerConfig;
 
     constructor(config?: Partial<ServerConfig>) {
         this.config = { ...DEFAULT_CONFIG, ...config };
+        this.resources.register(...ALL_RESOURCES);
     }
 
     /** Register a tool category */
@@ -428,7 +432,7 @@ export class McpServer {
                     id: rpc.id,
                     result: {
                         protocolVersion: MCP_PROTOCOL_VERSION,
-                        capabilities: { tools: {} },
+                        capabilities: { tools: {}, resources: {} },
                         serverInfo: {
                             name: "cocos-creator-mcp",
                             version: "1.0.0",
@@ -482,6 +486,68 @@ export class McpServer {
                             error: { code: -32603, message: e.message || String(e) },
                         };
                     }
+                }
+                break;
+            }
+
+            case "resources/list":
+                response = {
+                    jsonrpc: "2.0",
+                    id: rpc.id,
+                    result: { resources: this.resources.listFixed() },
+                };
+                break;
+
+            case "resources/templates/list":
+                response = {
+                    jsonrpc: "2.0",
+                    id: rpc.id,
+                    result: { resourceTemplates: this.resources.listTemplates() },
+                };
+                break;
+
+            case "resources/read": {
+                const uri = rpc.params?.uri;
+                if (typeof uri !== "string" || !uri) {
+                    response = {
+                        jsonrpc: "2.0",
+                        id: rpc.id,
+                        error: { code: -32602, message: "resources/read: 'uri' is required" },
+                    };
+                    break;
+                }
+                const match = this.resources.match(uri);
+                if (!match) {
+                    response = {
+                        jsonrpc: "2.0",
+                        id: rpc.id,
+                        error: { code: -32602, message: `Unknown resource URI: ${uri}` },
+                    };
+                    break;
+                }
+                try {
+                    const start = Date.now();
+                    console.log(`[cocos-creator-mcp] ▶ resource ${uri}`);
+                    const data = await withTimeout(match.def.read(match.params), 30000, `Resource ${uri} timed out`);
+                    console.log(`[cocos-creator-mcp] ✓ resource ${uri} (${Date.now() - start}ms)`);
+                    response = {
+                        jsonrpc: "2.0",
+                        id: rpc.id,
+                        result: {
+                            contents: [{
+                                uri,
+                                mimeType: match.def.mimeType || "application/json",
+                                text: JSON.stringify(data, null, 2),
+                            }],
+                        },
+                    };
+                } catch (e: any) {
+                    console.error(`[cocos-creator-mcp] ✗ resource ${uri}:`, e.message || String(e));
+                    response = {
+                        jsonrpc: "2.0",
+                        id: rpc.id,
+                        error: { code: -32603, message: e.message || String(e) },
+                    };
                 }
                 break;
             }

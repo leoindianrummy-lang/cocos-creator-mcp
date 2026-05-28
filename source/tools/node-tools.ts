@@ -12,20 +12,22 @@ export class NodeTools implements ToolCategory {
     getTools(): ToolDefinition[] {
         return [
             {
-                name: "node_create",
-                description: "Create a new node in the scene.",
+                name: "node_manage",
+                description: "Node lifecycle operations. Actions: 'create' (name [+ parent + components[]]), 'delete' (uuid), 'duplicate' (uuid), 'move' (uuid, parent). For property edits use node_set_property / node_set_transform / node_set_active / node_set_layout. For node-tree construction use node_create_tree.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        name: { type: "string", description: "Node name" },
-                        parent: { type: "string", description: "Parent node UUID (optional, defaults to scene root)" },
+                        action: { type: "string", description: "'create' | 'delete' | 'duplicate' | 'move'" },
+                        name: { type: "string", description: "Node name (action=create)" },
+                        parent: { type: "string", description: "Parent node UUID (action=create [optional] | action=move [required])" },
                         components: {
                             type: "array",
                             items: { type: "string" },
-                            description: "Component class names to add (e.g. ['cc.Label', 'cc.Sprite'])",
+                            description: "Component class names to add on create (e.g. ['cc.Label', 'cc.Sprite'])",
                         },
+                        uuid: { type: "string", description: "Target node UUID (action=delete|duplicate|move)" },
                     },
-                    required: ["name"],
+                    required: ["action"],
                 },
             },
             {
@@ -90,40 +92,6 @@ export class NodeTools implements ToolCategory {
                 },
             },
             {
-                name: "node_delete",
-                description: "Delete a node by UUID.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node UUID" },
-                    },
-                    required: ["uuid"],
-                },
-            },
-            {
-                name: "node_move",
-                description: "Move a node to a new parent.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node UUID" },
-                        parentUuid: { type: "string", description: "New parent node UUID" },
-                    },
-                    required: ["uuid", "parentUuid"],
-                },
-            },
-            {
-                name: "node_duplicate",
-                description: "Duplicate a node.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node UUID to duplicate" },
-                    },
-                    required: ["uuid"],
-                },
-            },
-            {
                 name: "node_get_all",
                 description: "Get a flat list of all nodes in the current scene.",
                 inputSchema: {
@@ -141,18 +109,6 @@ export class NodeTools implements ToolCategory {
                         active: { type: "boolean", description: "Whether the node is active" },
                     },
                     required: ["uuid", "active"],
-                },
-            },
-            {
-                name: "node_set_layer",
-                description: "Set a node's layer.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node UUID" },
-                        layer: { type: "number", description: "Layer value" },
-                    },
-                    required: ["uuid", "layer"],
                 },
             },
             {
@@ -226,8 +182,8 @@ export class NodeTools implements ToolCategory {
         if (rejected) return rejected;
 
         switch (toolName) {
-            case "node_create":
-                return this.createNode(args.name, args.parent, args.components);
+            case "node_manage":
+                return this.handleManage(args);
             case "node_get_info":
                 return this.getNodeInfo(args.uuid);
             case "node_find_by_name":
@@ -236,18 +192,10 @@ export class NodeTools implements ToolCategory {
                 return this.setProperty(args.uuid, args.property, parseMaybeJson(args.value));
             case "node_set_transform":
                 return this.setTransform(args.uuid, args.position, args.rotation, args.scale);
-            case "node_delete":
-                return this.deleteNode(args.uuid);
-            case "node_move":
-                return this.moveNode(args.uuid, args.parentUuid);
-            case "node_duplicate":
-                return this.duplicateNode(args.uuid);
             case "node_get_all":
                 return this.getAllNodes();
             case "node_set_active":
                 return this.setProperty(args.uuid, "active", args.active);
-            case "node_set_layer":
-                return this.setProperty(args.uuid, "layer", args.layer);
             case "node_create_tree":
                 return this.createNodeTree(args.parent, parseMaybeJson(args.spec));
             case "node_set_layout":
@@ -271,10 +219,31 @@ export class NodeTools implements ToolCategory {
 
     /** Scene editing tools that must not run during preview */
     private static readonly SCENE_EDIT_TOOLS = new Set([
-        "node_create", "node_delete", "node_move", "node_duplicate",
-        "node_set_property", "node_set_transform", "node_set_active", "node_set_layer",
+        "node_manage",
+        "node_set_property", "node_set_transform", "node_set_active",
         "node_create_tree", "node_set_layout",
     ]);
+
+    /** node_manage dispatcher (v2.0.0). */
+    private async handleManage(args: Record<string, any>): Promise<ToolResult> {
+        switch (args.action) {
+            case "create":
+                if (!args.name) return err("node_manage(create): 'name' is required");
+                return this.createNode(args.name, args.parent, args.components);
+            case "delete":
+                if (!args.uuid) return err("node_manage(delete): 'uuid' is required");
+                return this.deleteNode(args.uuid);
+            case "duplicate":
+                if (!args.uuid) return err("node_manage(duplicate): 'uuid' is required");
+                return this.duplicateNode(args.uuid);
+            case "move":
+                if (!args.uuid) return err("node_manage(move): 'uuid' is required");
+                if (!args.parent) return err("node_manage(move): 'parent' is required");
+                return this.moveNode(args.uuid, args.parent);
+            default:
+                return err(`Unknown node_manage action: ${args.action}. Expected create / delete / duplicate / move.`);
+        }
+    }
 
     private async rejectIfPreviewRunning(toolName: string): Promise<ToolResult | null> {
         if (!NodeTools.SCENE_EDIT_TOOLS.has(toolName)) return null;

@@ -6,44 +6,65 @@ import { takeEditorScreenshot } from "../screenshot";
 
 const EXT_NAME = "cocos-creator-mcp";
 
+/**
+ * v2.0.0: 値型プロパティの簡易オブジェクト形式 → Editor dump 形式への変換テーブル。
+ *
+ * これらは cc.Vec3 等のクラスインスタンスを使わずに `{x, y, z}` のような
+ * プレーンオブジェクトで設定できるようにするためのもの。
+ *
+ * Color は 0-255 / 0-1 のいずれかで来る可能性があるが、Cocos Editor の
+ * dump 形式が期待する単位 (0-255) で渡す前提。入力が 0-1 の場合は呼び出し側で
+ * 変換すること。
+ */
+const VALUE_TYPE_BUILDERS: Record<string, (v: any) => any> = {
+    "cc.Vec2": (v) => ({
+        value: { x: Number(v.x) || 0, y: Number(v.y) || 0 },
+        type: "cc.Vec2",
+    }),
+    "cc.Vec3": (v) => ({
+        value: { x: Number(v.x) || 0, y: Number(v.y) || 0, z: Number(v.z) || 0 },
+        type: "cc.Vec3",
+    }),
+    "cc.Vec4": (v) => ({
+        value: { x: Number(v.x) || 0, y: Number(v.y) || 0, z: Number(v.z) || 0, w: Number(v.w) || 0 },
+        type: "cc.Vec4",
+    }),
+    "cc.Color": (v) => ({
+        value: {
+            r: Number(v.r ?? 0),
+            g: Number(v.g ?? 0),
+            b: Number(v.b ?? 0),
+            a: Number(v.a ?? 255),
+        },
+        type: "cc.Color",
+    }),
+    "cc.Size": (v) => ({
+        value: {
+            // width/height でも x/y でも受け付ける
+            width: Number(v.width ?? v.x ?? 0),
+            height: Number(v.height ?? v.y ?? 0),
+        },
+        type: "cc.Size",
+    }),
+};
+
 export class ComponentTools implements ToolCategory {
     readonly categoryName = "component";
 
     getTools(): ToolDefinition[] {
         return [
             {
-                name: "component_add",
-                description: "Add a component to a node. Use cc.XXX format (e.g. 'cc.Label', 'cc.Sprite', 'cc.Button').",
+                name: "component_manage",
+                description: "Component lifecycle and class queries. Actions: 'add' (uuid, componentType), 'remove' (uuid, componentType), 'available' (list all component classes), 'enum' (uuid, componentType, property — list enum values for a component property like Layout.type).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        uuid: { type: "string", description: "Node UUID" },
-                        componentType: { type: "string", description: "Component class name (e.g. 'cc.Label')" },
+                        action: { type: "string", description: "'add' | 'remove' | 'available' | 'enum'" },
+                        uuid: { type: "string", description: "Node UUID (action=add|remove|enum)" },
+                        componentType: { type: "string", description: "Component class name (e.g. 'cc.Label', action=add|remove|enum)" },
+                        property: { type: "string", description: "Property name (action=enum)" },
                     },
-                    required: ["uuid", "componentType"],
-                },
-            },
-            {
-                name: "component_remove",
-                description: "Remove a component from a node.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node UUID" },
-                        componentType: { type: "string", description: "Component class name to remove" },
-                    },
-                    required: ["uuid", "componentType"],
-                },
-            },
-            {
-                name: "component_get_components",
-                description: "Get all components on a node with their properties.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node UUID (either uuid or nodeName required)" },
-                        nodeName: { type: "string", description: "Node name to find (alternative to uuid)" },
-                    },
+                    required: ["action"],
                 },
             },
             {
@@ -75,22 +96,6 @@ export class ComponentTools implements ToolCategory {
                 },
             },
             {
-                name: "component_get_info",
-                description: "Get detailed dump of a specific component by its UUID.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        componentUuid: { type: "string", description: "Component UUID (not node UUID)" },
-                    },
-                    required: ["componentUuid"],
-                },
-            },
-            {
-                name: "component_get_available",
-                description: "List all available component classes that can be added to nodes.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
                 name: "component_auto_bind",
                 description: "Automatically bind @property references by matching property names to descendant node names. Searches only descendants of the target node. Validates component type existence. Supports array properties (Slot_0, Slot_1...). Mode: 'fuzzy' (default) tries exact match first, then case-insensitive; 'strict' requires exact match only.",
                 inputSchema: {
@@ -103,19 +108,6 @@ export class ComponentTools implements ToolCategory {
                         mode: { type: "string", enum: ["fuzzy", "strict"], description: "Matching mode: 'fuzzy' (default) or 'strict'" },
                     },
                     required: ["componentType"],
-                },
-            },
-            {
-                name: "component_query_enum",
-                description: "Get enum values for a component property. Useful for knowing what values Layout.type, Layout.resizeMode, etc. accept.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node UUID" },
-                        componentType: { type: "string", description: "Component class (e.g. 'cc.Layout')" },
-                        property: { type: "string", description: "Property name (e.g. 'type', 'resizeMode')" },
-                    },
-                    required: ["uuid", "componentType", "property"],
                 },
             },
         ];
@@ -137,12 +129,8 @@ export class ComponentTools implements ToolCategory {
         }
 
         switch (toolName) {
-            case "component_add":
-                return this.addComponent(args.uuid, compType);
-            case "component_remove":
-                return this.removeComponent(args.uuid, compType);
-            case "component_get_components":
-                return this.getComponents(args.uuid);
+            case "component_manage":
+                return this.handleManage(args);
             case "component_set_property": {
                 const properties = parseMaybeJson(args.properties);
                 let result: ToolResult;
@@ -168,24 +156,38 @@ export class ComponentTools implements ToolCategory {
                 }
                 return result;
             }
-            case "component_get_info": {
-                try {
-                    const dump = await (Editor.Message.request as any)("scene", "query-component", args.componentUuid);
-                    return ok({ success: true, component: dump });
-                } catch (e: any) { return err(e.message || String(e)); }
-            }
-            case "component_get_available": {
-                try {
-                    const classes = await (Editor.Message.request as any)("scene", "query-classes");
-                    return ok({ success: true, classes });
-                } catch (e: any) { return err(e.message || String(e)); }
-            }
             case "component_auto_bind":
                 return this.autoBind(args.uuid, compType, args.force ?? false, args.mode ?? "fuzzy");
-            case "component_query_enum":
-                return this.queryEnum(args.uuid, compType, args.property);
             default:
                 return err(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    /** component_manage dispatcher (v2.0.0). */
+    private async handleManage(args: Record<string, any>): Promise<ToolResult> {
+        const compType = args.componentType || args.component;
+        switch (args.action) {
+            case "add":
+                if (!args.uuid) return err("component_manage(add): 'uuid' is required");
+                if (!compType) return err("component_manage(add): 'componentType' is required");
+                return this.addComponent(args.uuid, compType);
+            case "remove":
+                if (!args.uuid) return err("component_manage(remove): 'uuid' is required");
+                if (!compType) return err("component_manage(remove): 'componentType' is required");
+                return this.removeComponent(args.uuid, compType);
+            case "available": {
+                try {
+                    const classes = await (Editor.Message.request as any)("scene", "query-classes");
+                    return ok({ success: true, action: args.action, classes });
+                } catch (e: any) { return err(e.message || String(e)); }
+            }
+            case "enum":
+                if (!args.uuid) return err("component_manage(enum): 'uuid' is required");
+                if (!compType) return err("component_manage(enum): 'componentType' is required");
+                if (!args.property) return err("component_manage(enum): 'property' is required");
+                return this.queryEnum(args.uuid, compType, args.property);
+            default:
+                return err(`Unknown component_manage action: ${args.action}. Expected add / remove / available / enum.`);
         }
     }
 
@@ -576,6 +578,23 @@ export class ComponentTools implements ToolCategory {
         if (typeof value === "number") return { value, type: "Number" };
         if (typeof value === "boolean") return { value, type: "Boolean" };
 
+        // v2.0.0: {path: "db://..."} / {guid: "..."} オブジェクト形式 — Asset 参照を path/guid で渡す方法
+        if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+            if (typeof value.path === "string" && value.path.startsWith("db://")) {
+                const resolvedUuid = await this.resolveAssetUuidByPath(value.path);
+                if (!resolvedUuid) throw new Error(`Asset not found at path: ${value.path}`);
+                if (typeof value.type === "string") {
+                    return { type: value.type, value: { uuid: resolvedUuid } };
+                }
+                value = resolvedUuid; // 以降、文字列として型解決経路へ
+            } else if (typeof value.guid === "string") {
+                if (typeof value.type === "string") {
+                    return { type: value.type, value: { uuid: value.guid } };
+                }
+                value = value.guid;
+            }
+        }
+
         // オブジェクト形式 {uuid: "xxx", type: "cc.Node"} はそのまま
         // type 指定なしの {uuid: "xxx"} はプロパティの実際の型を解決するため文字列扱いに変換する
         if (value !== null && typeof value === "object" && typeof value.uuid === "string") {
@@ -595,6 +614,13 @@ export class ComponentTools implements ToolCategory {
             } else {
                 throw new Error(`Node not found at path: ${nodePath}`);
             }
+        }
+
+        // v2.0.0: db:// 始まりの文字列は Asset path として UUID に自動解決
+        if (typeof value === "string" && value.startsWith("db://")) {
+            const resolvedUuid = await this.resolveAssetUuidByPath(value);
+            if (!resolvedUuid) throw new Error(`Asset not found at path: ${value}`);
+            value = resolvedUuid;
         }
 
         // 文字列の場合: プロパティの型情報を取得して判定
@@ -621,16 +647,40 @@ export class ComponentTools implements ToolCategory {
                         if (isAssetRef) {
                             return { type: propType, value: { uuid: value } };
                         }
+                        // v2.0.0: Enum 名 → 数値変換 (Layout.type="HORIZONTAL" 等)
+                        if (propType === "Enum" && Array.isArray(propDump.enumList)) {
+                            const item = propDump.enumList.find((e: any) => e?.name === value);
+                            if (item && typeof item.value === "number") {
+                                return { value: item.value, type: "Enum" };
+                            }
+                            // 名前で見つからない場合は数値として解釈を試みる (後方互換)
+                            const asNum = Number(value);
+                            if (!Number.isNaN(asNum)) return { value: asNum, type: "Enum" };
+                            throw new Error(`Enum value "${value}" not found in enumList: ${propDump.enumList.map((e: any) => e?.name).join(", ")}`);
+                        }
                     }
                 }
-            } catch (_e) {
+            } catch (e: any) {
+                // Enum で名前不一致は明示的に throw する (上で throw した場合)
+                if (e?.message?.startsWith("Enum value ")) throw e;
                 // query-node失敗時はフォールバック
             }
             return { value, type: "String" };
         }
 
-        // その他のオブジェクト（contentSize, color等の構造体）
+        // v2.0.0: cc.Vec2/Vec3/Vec4/Color/Size の値型を簡易オブジェクトから dump 生成
         if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+            try {
+                const nodeDump = await (Editor.Message.request as any)("scene", "query-node", nodeUuid);
+                if (nodeDump) {
+                    const propDump = this.resolveDumpPath(nodeDump, path);
+                    const propType = propDump?.type as string | undefined;
+                    const builder = VALUE_TYPE_BUILDERS[propType ?? ""];
+                    if (builder) return builder(value);
+                }
+            } catch (_e) { /* fallthrough */ }
+
+            // 既存挙動: プロパティ型が解決できない場合は各キーを {value: v} で wrap
             const wrapped: any = {};
             for (const [k, v] of Object.entries(value)) {
                 wrapped[k] = { value: v };
@@ -659,6 +709,18 @@ export class ComponentTools implements ToolCategory {
             }
         }
         return current;
+    }
+
+    /**
+     * Asset path (db://...) から asset UUID を解決する。サブアセット指定 (@spriteFrame 等)
+     * もそのまま query-uuid に投げる。失敗時は null を返す。
+     */
+    private async resolveAssetUuidByPath(assetPath: string): Promise<string | null> {
+        try {
+            const uuid = await (Editor.Message.request as any)("asset-db", "query-uuid", assetPath);
+            if (typeof uuid === "string" && uuid.length > 0) return uuid;
+        } catch (_e) { /* fallthrough */ }
+        return null;
     }
 
     /**

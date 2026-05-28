@@ -30,23 +30,18 @@ export class PrefabTools implements ToolCategory {
     getTools(): ToolDefinition[] {
         return [
             {
-                name: "prefab_list",
-                description: "List all prefab files in the project.",
-                inputSchema: {
-                    type: "object",
-                    properties: {},
-                },
-            },
-            {
                 name: "prefab_create",
-                description: "Create a prefab from an existing node in the scene. The node remains in the scene.",
+                description: "Create a prefab. Modes: 'simple' (default — extract a node into a prefab, original node stays in scene; needs uuid + path), 'replace' (extract + replace original node with a prefab instance, recommended for nested prefabs; needs uuid + path), 'from_spec' (build node tree + auto-bind + create in one call from a JSON spec; needs path + spec [+ autoBindMode]).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        uuid: { type: "string", description: "Node UUID to create prefab from" },
-                        path: { type: "string", description: "db:// path for the prefab (e.g. 'db://assets/prefabs/MyPrefab.prefab')" },
+                        mode: { type: "string", description: "'simple' (default) | 'replace' | 'from_spec'" },
+                        uuid: { type: "string", description: "Node UUID (mode=simple|replace)" },
+                        path: { type: "string", description: "db:// path for the new prefab" },
+                        spec: { description: "Node tree spec (mode=from_spec) — see node_create_tree format + optional autoBind field" },
+                        autoBindMode: { type: "string", enum: ["fuzzy", "strict"], description: "Auto-bind matching mode (mode=from_spec, default fuzzy)" },
                     },
-                    required: ["uuid", "path"],
+                    required: ["path"],
                 },
             },
             {
@@ -59,17 +54,6 @@ export class PrefabTools implements ToolCategory {
                         parent: { type: "string", description: "Parent node UUID (optional, defaults to scene root)" },
                     },
                     required: ["prefabUuid"],
-                },
-            },
-            {
-                name: "prefab_get_info",
-                description: "Get information about a prefab asset (name, path, UUID).",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Prefab asset UUID" },
-                    },
-                    required: ["uuid"],
                 },
             },
             {
@@ -118,52 +102,19 @@ export class PrefabTools implements ToolCategory {
                 },
             },
             {
-                name: "prefab_create_and_replace",
-                description: "Create a prefab from a node AND replace the original node with a prefab instance. This is the recommended way to extract a nested prefab — one command instead of create → delete → instantiate.",
+                name: "prefab_edit",
+                description: "Enter / exit prefab editing mode. Actions: 'open' (uuid or path [+ force]) — equivalent to double-clicking the prefab; 'close' ([+ save] [+ sceneUuid] [+ force]) — save & exit edit mode and return to a scene. dirty-untitled preflight applies as with scene_manage.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        uuid: { type: "string", description: "Node UUID to create prefab from" },
-                        path: { type: "string", description: "db:// path for the prefab (e.g. 'db://assets/prefabs/MyPrefab.prefab')" },
+                        action: { type: "string", description: "'open' | 'close'" },
+                        uuid: { type: "string", description: "Prefab asset UUID (action=open)" },
+                        path: { type: "string", description: "Prefab db:// path (action=open, alternative to uuid)" },
+                        save: { type: "boolean", description: "Save prefab before closing (action=close, default true)" },
+                        sceneUuid: { type: "string", description: "Scene UUID to return to on close (default: start scene)" },
+                        force: { type: "boolean", description: "Skip dirty-scene preflight" },
                     },
-                    required: ["uuid", "path"],
-                },
-            },
-            {
-                name: "prefab_open",
-                description: "Open a prefab in editing mode. Equivalent to double-clicking the prefab in CocosCreator. Returns an error if the current scene is dirty and untitled (to avoid modal save dialog); pass force=true to bypass.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Prefab asset UUID" },
-                        path: { type: "string", description: "Prefab db:// path (alternative to uuid)" },
-                        force: { type: "boolean", description: "Skip dirty-scene preflight check (may trigger modal save dialog)" },
-                    },
-                },
-            },
-            {
-                name: "prefab_close",
-                description: "Save and close the current prefab editing mode, then return to the main scene. Returns an error if the current prefab is dirty and untitled (to avoid modal save dialog); pass force=true to bypass.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        save: { type: "boolean", description: "Save prefab before closing (default true)" },
-                        sceneUuid: { type: "string", description: "Scene UUID to return to (default: project's start scene or first scene)" },
-                        force: { type: "boolean", description: "Skip dirty-scene preflight check (may trigger modal save dialog)" },
-                    },
-                },
-            },
-            {
-                name: "prefab_create_from_spec",
-                description: "Create a prefab from a JSON spec in one call. Combines node_create_tree + component_auto_bind + prefab_create into a single operation. Spec extends node_create_tree format with optional autoBind field. Example: { name: 'MyPopup', components: ['cc.UITransform', 'MyPopupView'], autoBind: 'MyPopupView', children: [{ name: 'CloseButton', components: ['cc.Button'] }] }",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        path: { type: "string", description: "db:// path for the prefab (e.g. 'db://assets/prefabs/MyPrefab.prefab')" },
-                        spec: { description: "Node tree specification with optional autoBind field (string for component type to auto-bind)" },
-                        autoBindMode: { type: "string", enum: ["fuzzy", "strict"], description: "Auto-bind matching mode (default: fuzzy)" },
-                    },
-                    required: ["path", "spec"],
+                    required: ["action"],
                 },
             },
         ];
@@ -171,14 +122,24 @@ export class PrefabTools implements ToolCategory {
 
     async execute(toolName: string, args: Record<string, any>): Promise<ToolResult> {
         switch (toolName) {
-            case "prefab_list":
-                return this.listPrefabs();
-            case "prefab_create":
-                return this.createPrefab(args.uuid, args.path);
+            case "prefab_create": {
+                const mode = args.mode || "simple";
+                if (mode === "simple") {
+                    if (!args.uuid) return err("prefab_create(simple): 'uuid' is required");
+                    return this.createPrefab(args.uuid, args.path);
+                }
+                if (mode === "replace") {
+                    if (!args.uuid) return err("prefab_create(replace): 'uuid' is required");
+                    return this.createAndReplace(args.uuid, args.path);
+                }
+                if (mode === "from_spec") {
+                    if (!args.spec) return err("prefab_create(from_spec): 'spec' is required");
+                    return this.createFromSpec(args.path, parseMaybeJson(args.spec), args.autoBindMode ?? "fuzzy");
+                }
+                return err(`Unknown prefab_create mode: ${mode}. Expected simple / replace / from_spec.`);
+            }
             case "prefab_instantiate":
                 return this.instantiatePrefab(args.prefabUuid, args.parent);
-            case "prefab_get_info":
-                return this.getPrefabInfo(args.uuid);
             case "prefab_update":
                 return this.updatePrefab(args.uuid);
             case "prefab_duplicate": {
@@ -196,14 +157,10 @@ export class PrefabTools implements ToolCategory {
             }
             case "prefab_revert":
                 return this.revertPrefab(args.uuid);
-            case "prefab_create_and_replace":
-                return this.createAndReplace(args.uuid, args.path);
-            case "prefab_open":
-                return this.openPrefab(args.uuid, args.path, !!args.force);
-            case "prefab_close":
-                return this.closePrefab(args.save !== false, args.sceneUuid, !!args.force);
-            case "prefab_create_from_spec":
-                return this.createFromSpec(args.path, parseMaybeJson(args.spec), args.autoBindMode ?? "fuzzy");
+            case "prefab_edit":
+                if (args.action === "open") return this.openPrefab(args.uuid, args.path, !!args.force);
+                if (args.action === "close") return this.closePrefab(args.save !== false, args.sceneUuid, !!args.force);
+                return err(`Unknown prefab_edit action: ${args.action}. Expected 'open' or 'close'.`);
             default:
                 return err(`Unknown tool: ${toolName}`);
         }
@@ -582,6 +539,14 @@ export class PrefabTools implements ToolCategory {
             // 4. フォント・SpriteFrame を Editor API 経由で設定（アセット依存追跡のため）
             await this._applyDefaultAssets(nodeUuid);
 
+            // 4b. v2.0.0: spec.properties を Editor API 経由で再設定する
+            //     buildNodeRecursive は scene-process 内で `comp[propName] = value` で代入するが、
+            //     これだと asset ref (UUID 文字列) が raw 文字列のまま .prefab に書き出され、
+            //     runtime で `{__uuid__, __expectedType__}` 形式に解決されないバグがある。
+            //     component_set_property 経由で再設定することで Editor が正しい dump 形式で
+            //     シリアライズしてくれる。値型 (Vec3/Color/Size) や enum 名なども透過的に解決される。
+            await this._reapplyPropertiesViaEditor(treeResult.data, cleanSpec);
+
             // 5. autoBind 実行 (旧4)
             let autoBindResult: any = null;
             if (autoBind) {
@@ -667,6 +632,49 @@ export class PrefabTools implements ToolCategory {
                     }
                 }
             } catch { /* skip nodes that can't be queried */ }
+        }
+    }
+
+    /**
+     * v2.0.0: spec.properties を Editor API (component_set_property) 経由で再設定する。
+     *
+     * buildNodeRecursive (scene.ts) は `comp[propName] = value` で代入するが、asset ref
+     * を含むプロパティは Editor シリアライザを通らないため .prefab JSON に raw UUID
+     * 文字列として書き出されてしまう (README Known Limitation 解消)。
+     *
+     * 本メソッドは nodeTree と spec を平行 walk して、各ノードの properties を再設定する。
+     * ComponentTools の buildDumpWithTypeInfo が型解決を行うため、UUID/path/{path,guid}/
+     * enum 名/Vec3/Color などをそのまま渡せる。
+     */
+    private async _reapplyPropertiesViaEditor(nodeTree: any, spec: any): Promise<void> {
+        if (!this._componentTools || !nodeTree?.uuid || !spec) return;
+
+        if (spec.properties && typeof spec.properties === "object") {
+            for (const [key, value] of Object.entries(spec.properties)) {
+                const dotIdx = key.lastIndexOf(".");
+                if (dotIdx < 0) continue;
+                const compType = key.substring(0, dotIdx);
+                const propName = key.substring(dotIdx + 1);
+                // contentSize は scene.ts 側で setContentSize() で適切に処理済みなのでスキップ
+                // (Editor 経由で再設定しても害はないが冗長)
+                if (propName === "contentSize") continue;
+                try {
+                    await this._componentTools.execute("component_set_property", {
+                        uuid: nodeTree.uuid,
+                        componentType: compType,
+                        property: propName,
+                        value,
+                    });
+                } catch (_e) {
+                    // 個別プロパティの失敗は無視して続行 (auto_bind 等で後から設定する場合あり)
+                }
+            }
+        }
+
+        const children = (nodeTree.children || []) as any[];
+        const specChildren = (spec.children || []) as any[];
+        for (let i = 0; i < Math.min(children.length, specChildren.length); i++) {
+            await this._reapplyPropertiesViaEditor(children[i], specChildren[i]);
         }
     }
 

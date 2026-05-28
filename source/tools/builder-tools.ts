@@ -7,55 +7,42 @@ export class BuilderTools implements ToolCategory {
     getTools(): ToolDefinition[] {
         return [
             {
-                name: "builder_open_panel",
-                description: "Open the Build panel in the editor.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "builder_get_settings",
-                description: "Get the current build settings/configuration.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "builder_query_tasks",
-                description: "Query active build tasks.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "builder_run_preview",
-                description: "Start the preview server for browser testing.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "builder_stop_preview",
-                description: "Stop the preview server.",
-                inputSchema: { type: "object", properties: {} },
+                name: "builder_manage",
+                description: "Manage the editor's Build / Preview server. Actions: 'open_panel' (open Build panel), 'get_settings' (read build config), 'query_tasks' (list active build tasks), 'run_preview' (start preview server), 'stop_preview' (stop preview server).",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        action: { type: "string", description: "'open_panel' | 'get_settings' | 'query_tasks' | 'run_preview' | 'stop_preview'" },
+                    },
+                    required: ["action"],
+                },
             },
         ];
     }
 
-    async execute(toolName: string, _args: Record<string, any>): Promise<ToolResult> {
+    async execute(toolName: string, args: Record<string, any>): Promise<ToolResult> {
+        if (toolName !== "builder_manage") return err(`Unknown tool: ${toolName}`);
         try {
-            switch (toolName) {
-                case "builder_open_panel":
+            switch (args.action) {
+                case "open_panel":
                     Editor.Panel.open("builder");
-                    return ok({ success: true });
-                case "builder_get_settings": {
+                    return ok({ success: true, action: args.action });
+                case "get_settings": {
                     const settings = await (Editor.Message.request as any)("builder", "query-build-options").catch(() => null);
-                    return ok({ success: true, settings });
+                    return ok({ success: true, action: args.action, settings });
                 }
-                case "builder_query_tasks": {
+                case "query_tasks": {
                     const tasks = await (Editor.Message.request as any)("builder", "query-tasks").catch(() => []);
-                    return ok({ success: true, tasks });
+                    return ok({ success: true, action: args.action, tasks });
                 }
-                case "builder_run_preview":
+                case "run_preview":
                     await (Editor.Message.request as any)("preview", "start");
-                    return ok({ success: true, message: "Preview started" });
-                case "builder_stop_preview":
+                    return ok({ success: true, action: args.action, message: "Preview started" });
+                case "stop_preview":
                     await (Editor.Message.request as any)("preview", "stop");
-                    return ok({ success: true, message: "Preview stopped" });
+                    return ok({ success: true, action: args.action, message: "Preview stopped" });
                 default:
-                    return err(`Unknown tool: ${toolName}`);
+                    return err(`Unknown builder_manage action: ${args.action}. Expected open_panel / get_settings / query_tasks / run_preview / stop_preview.`);
             }
         } catch (e: any) {
             return err(e.message || String(e));

@@ -506,4 +506,117 @@ export const methods: Record<string, (...args: any[]) => any> = {
             return { success: false, error: e.message };
         }
     },
+
+    /**
+     * v2.0.0 (issue #29): ツール体系で覆えない 1〜10% の操作を逃がす脱出口。
+     * scene プロセス内で任意の JS を実行する。
+     *
+     * code は async 関数でラップされるので、await をそのまま使える。
+     * `return <expr>` で値を返すか、最終式の値を return すること。
+     *
+     * 利用可能なグローバル: Editor, cc (engine), console
+     *
+     * セキュリティ警告: Editor 権限と同等の影響範囲。ローカル開発専用。
+     */
+    async executeEditorScript({ code, timeoutMs, returnLogs }: { code: string; timeoutMs?: number; returnLogs?: boolean }) {
+        const start = Date.now();
+        const cc = require("cc");
+        const logs: string[] = [];
+
+        const origLog = console.log;
+        const origWarn = console.warn;
+        const origError = console.error;
+        if (returnLogs) {
+            console.log = (...args: any[]) => { logs.push("[log] " + args.map(stringifyArg).join(" ")); origLog.apply(console, args); };
+            console.warn = (...args: any[]) => { logs.push("[warn] " + args.map(stringifyArg).join(" ")); origWarn.apply(console, args); };
+            console.error = (...args: any[]) => { logs.push("[error] " + args.map(stringifyArg).join(" ")); origError.apply(console, args); };
+        }
+
+        const tmo = typeof timeoutMs === "number" ? timeoutMs : 5000;
+        try {
+            // code を async function でラップ — return が無い場合の最終値は undefined だが、
+            // 利用者が return <expr> 形式で返すことを想定。
+            // eslint-disable-next-line no-new-func
+            const fn = new Function("Editor", "cc", "console",
+                `return (async () => { ${code} })();`);
+            const promise = fn(Editor, cc, console);
+            const timeout = new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error(`execute_editor_script timeout after ${tmo}ms`)), tmo)
+            );
+            const result = await Promise.race([promise, timeout]);
+            const durationMs = Date.now() - start;
+            const payload: any = {
+                success: true,
+                result: serializeForResponse(result),
+                durationMs,
+            };
+            if (returnLogs) payload.logs = logs;
+            return payload;
+        } catch (e: any) {
+            const payload: any = {
+                success: false,
+                error: e.message || String(e),
+                stack: e.stack,
+                durationMs: Date.now() - start,
+            };
+            if (returnLogs) payload.logs = logs;
+            return payload;
+        } finally {
+            if (returnLogs) {
+                console.log = origLog;
+                console.warn = origWarn;
+                console.error = origError;
+            }
+        }
+    },
 };
+
+/**
+ * execute_editor_script のレスポンス用 serializer。
+ *
+ * cc.Node / cc.Component インスタンスは UUID と name のサマリーに変換し、
+ * 循環参照は [Circular] に。Function は [Function: name] に。深さ制限あり。
+ */
+function serializeForResponse(value: any, depth: number = 0, seen: WeakSet<any> = new WeakSet()): any {
+    const MAX_DEPTH = 6;
+    if (value === null || value === undefined) return value;
+    const t = typeof value;
+    if (t === "string" || t === "number" || t === "boolean") return value;
+    if (t === "function") return `[Function: ${(value.name || "anonymous")}]`;
+
+    if (t === "object") {
+        if (seen.has(value)) return "[Circular]";
+        seen.add(value);
+        if (depth >= MAX_DEPTH) return "[MaxDepth]";
+
+        // cc.Node 判定: uuid + name + children プロパティを持つもの
+        if (typeof value.uuid === "string" && typeof value.name === "string" && Array.isArray((value as any).children)) {
+            return { __node__: true, uuid: value.uuid, name: value.name, childCount: (value as any).children.length };
+        }
+        // cc.Component 判定: uuid + node + constructor.name を持つ
+        if (typeof value.uuid === "string" && value.node && typeof value.constructor?.name === "string") {
+            return { __component__: true, uuid: value.uuid, type: value.constructor.name };
+        }
+        if (Array.isArray(value)) {
+            return value.slice(0, 200).map((v) => serializeForResponse(v, depth + 1, seen));
+        }
+        const out: Record<string, any> = {};
+        let count = 0;
+        for (const k of Object.keys(value)) {
+            if (count++ >= 100) { out["__truncated__"] = true; break; }
+            try {
+                out[k] = serializeForResponse((value as any)[k], depth + 1, seen);
+            } catch {
+                out[k] = "[Unserializable]";
+            }
+        }
+        return out;
+    }
+    return String(value);
+}
+
+function stringifyArg(v: any): string {
+    if (v === null || v === undefined) return String(v);
+    if (typeof v === "string") return v;
+    try { return JSON.stringify(v); } catch { return String(v); }
+}

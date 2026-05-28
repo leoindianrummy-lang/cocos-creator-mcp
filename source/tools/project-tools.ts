@@ -7,14 +7,6 @@ export class ProjectTools implements ToolCategory {
     getTools(): ToolDefinition[] {
         return [
             {
-                name: "project_get_info",
-                description: "Get project information (name, path, engine version).",
-                inputSchema: {
-                    type: "object",
-                    properties: {},
-                },
-            },
-            {
                 name: "project_refresh_assets",
                 description: "Refresh the asset database to detect file changes.",
                 inputSchema: {
@@ -68,11 +60,6 @@ export class ProjectTools implements ToolCategory {
                 },
             },
             {
-                name: "project_get_engine_info",
-                description: "Get engine version and path information.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
                 name: "project_query_scripts",
                 description: "Query all script plugins in the project.",
                 inputSchema: { type: "object", properties: {} },
@@ -82,8 +69,6 @@ export class ProjectTools implements ToolCategory {
 
     async execute(toolName: string, args: Record<string, any>): Promise<ToolResult> {
         switch (toolName) {
-            case "project_get_info":
-                return this.getInfo();
             case "project_refresh_assets":
                 return this.refreshAssets();
             case "project_get_asset_info":
@@ -100,12 +85,6 @@ export class ProjectTools implements ToolCategory {
                 try {
                     await (Editor.Message.request as any)("project", "set-config", args.protocol, args.key, args.value);
                     return ok({ success: true });
-                } catch (e: any) { return err(e.message || String(e)); }
-            }
-            case "project_get_engine_info": {
-                try {
-                    const info = await (Editor.Message.request as any)("engine", "query-info");
-                    return ok({ success: true, info });
                 } catch (e: any) { return err(e.message || String(e)); }
             }
             case "project_query_scripts": {

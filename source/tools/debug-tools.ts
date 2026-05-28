@@ -11,11 +11,6 @@ export class DebugTools implements ToolCategory {
     getTools(): ToolDefinition[] {
         return [
             {
-                name: "debug_get_editor_info",
-                description: "Get Cocos Creator editor information (version, platform, language).",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
                 name: "debug_list_messages",
                 description: "List available Editor messages for a given extension or built-in module.",
                 inputSchema: {
@@ -39,52 +34,51 @@ export class DebugTools implements ToolCategory {
                 },
             },
             {
-                name: "debug_get_console_logs",
-                description: "Get recent console log entries. Automatically captures scene process logs (console.log/warn/error in scene scripts). Game preview logs can also be captured by sending POST requests to /log endpoint — see README for setup.",
+                name: "read_console",
+                description: "Read Editor / Scene / Game console logs in one tool. Captures compile errors (from Editor / project.log), runtime errors, and console.log output across all sources. Supports action='get' (default) and action='clear'. Replaces debug_get_console_logs / debug_clear_console in v2.0.0.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        count: { type: "number", description: "Max number of entries (default 50)" },
-                        level: { type: "string", description: "Filter by level: 'log', 'warn', or 'error'" },
-                        source: { type: "string", description: "Filter by source: 'scene' or 'game'. Returns both if omitted." },
+                        action: { type: "string", description: "'get' (default) or 'clear'." },
+                        types: {
+                            type: "array",
+                            items: { type: "string" },
+                            description: "Filter by entry type. Any of 'log' | 'info' | 'warn' | 'error'. Returns all types if omitted.",
+                        },
+                        sources: {
+                            type: "array",
+                            items: { type: "string" },
+                            description: "Filter by source. Any of 'editor' | 'scene' | 'game'. Default: all three.",
+                        },
+                        count: { type: "number", description: "Max entries to return after merge (default 50)." },
+                        includeStacktrace: { type: "boolean", description: "Include stacktrace strings if available (default false)." },
+                        since: { type: "string", description: "ISO timestamp — return only entries newer than this (optional)." },
+                        search: { type: "string", description: "Substring or regex pattern to filter messages (optional)." },
                     },
                 },
             },
             {
-                name: "debug_clear_console",
-                description: "Clear the editor console.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "debug_list_extensions",
-                description: "List all installed extensions.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "debug_get_project_logs",
-                description: "Read recent project log entries from the log file.",
+                name: "debug_logs",
+                description: "Read or search the project log file (separate from read_console — this is the editor's persistent log). Actions: 'get' (last N lines), 'search' (regex pattern), 'info' (file size / path / mtime).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        lines: { type: "number", description: "Number of lines to read (default 100)" },
+                        action: { type: "string", description: "'get' (default) | 'search' | 'info'" },
+                        lines: { type: "number", description: "Number of lines to read (action=get, default 100)" },
+                        pattern: { type: "string", description: "Regex pattern (action=search)" },
                     },
                 },
             },
             {
-                name: "debug_search_project_logs",
-                description: "Search for a pattern in project logs.",
+                name: "debug_extension",
+                description: "Manage editor extensions (this MCP server itself + others). Actions: 'list' (all installed extensions), 'info' (details for a specific extension by name), 'reload' (reload this MCP extension — for new tool definitions a full CC restart is still required).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        pattern: { type: "string", description: "Search pattern (regex supported)" },
+                        action: { type: "string", description: "'list' (default) | 'info' | 'reload'" },
+                        name: { type: "string", description: "Extension name (action=info)" },
                     },
-                    required: ["pattern"],
                 },
-            },
-            {
-                name: "debug_get_log_file_info",
-                description: "Get information about the project log file (size, path, last modified).",
-                inputSchema: { type: "object", properties: {} },
             },
             // ── 以下、既存MCP未対応のEditor API ──
             {
@@ -123,12 +117,15 @@ export class DebugTools implements ToolCategory {
             },
             {
                 name: "debug_screenshot",
-                description: "Take a screenshot of the editor window and save to a file. Returns the file path of the saved PNG.",
+                description: "Capture screenshots. Targets: 'window' (default — editor window, returns saved PNG path) or 'pages' (navigate game preview to each page name in `pages` and screenshot each — requires GameDebugClient + active preview).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        savePath: { type: "string", description: "File path to save the PNG (default: temp/screenshots/screenshot_<timestamp>.png)" },
-                        maxWidth: { type: "number", description: "Max width in pixels for resize (default: 960, 0 = no resize). Aspect ratio is preserved." },
+                        target: { type: "string", description: "'window' (default) | 'pages'" },
+                        savePath: { type: "string", description: "File path (target=window, default temp/screenshots/screenshot_<timestamp>.png)" },
+                        maxWidth: { type: "number", description: "Max width in pixels for resize (default 960, 0 = no resize)" },
+                        pages: { type: "array", items: { type: "string" }, description: "Page names to screenshot (target=pages, e.g. ['HomePageView','ShopPageView'])" },
+                        delay: { type: "number", description: "Delay ms between navigate and screenshot (target=pages, default 1000)" },
                     },
                 },
             },
@@ -150,61 +147,34 @@ export class DebugTools implements ToolCategory {
                 inputSchema: { type: "object", properties: {} },
             },
             {
-                name: "debug_reload_extension",
-                description: "Reload the MCP extension itself. Use after npm run build to apply code changes without restarting CocosCreator. Response is sent before reload starts.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "debug_get_extension_info",
-                description: "Get detailed information about a specific extension.",
+                name: "debug_record",
+                description: "Record the game preview canvas to a video file (MP4/WebM via MediaRecorder on the game side). Actions: 'start' (configure fps/quality/format/savePath) and 'stop' (returns file path + size). Video saved to project's temp/recordings/rec_<datetime>.* by default.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        name: { type: "string", description: "Extension name" },
-                    },
-                    required: ["name"],
-                },
-            },
-            {
-                name: "debug_record_start",
-                description: "Start recording the game preview canvas to a video file. Uses MediaRecorder on the game side. Bitrate is auto-calculated from canvas resolution × fps × quality coefficient unless videoBitsPerSecond is set explicitly.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        fps: { type: "number", description: "Frames per second (default: 30)" },
-                        quality: { type: "string", description: "'low'/'medium'/'high'/'ultra' (default: medium). Coefficients: 0.15/0.25/0.40/0.60" },
+                        action: { type: "string", description: "'start' | 'stop'" },
+                        fps: { type: "number", description: "Frames per second (action=start, default 30)" },
+                        quality: { type: "string", description: "'low'|'medium'|'high'|'ultra' (action=start, default medium). Coefficients 0.15/0.25/0.40/0.60." },
                         coefficient: { type: "number", description: "Custom bitrate coefficient (width × height × fps × coefficient). Overrides quality." },
                         videoBitsPerSecond: { type: "number", description: "Explicit bitrate in bps. Overrides quality-based calculation." },
-                        format: { type: "string", description: "'mp4' (default) or 'webm'. mp4 falls back to webm if not supported." },
+                        format: { type: "string", description: "'mp4' (default) | 'webm'. mp4 falls back to webm if unsupported." },
                         savePath: { type: "string", description: "Save directory (project-relative or absolute). Default: temp/recordings" },
+                        timeout: { type: "number", description: "Max wait time in ms for file upload (action=stop, default 30000)" },
                     },
+                    required: ["action"],
                 },
             },
             {
-                name: "debug_record_stop",
-                description: "Stop recording started by debug_record_start. Returns the saved WebM file path and size. Video is saved to project's temp/recordings/rec_<datetime>.webm.",
+                name: "execute_editor_script",
+                description: "ESCAPE HATCH (v2.0.0). Execute arbitrary JavaScript in the editor's scene process. Use for operations not covered by other tools: atomic transactions, experimental APIs, bulk operations, project-specific workflows. Code is wrapped in an async function so 'await' is usable directly. Available globals: Editor (Message API), cc (engine module), console. Return values are serialized; cc.Node / cc.Component instances become summary objects. WARNING: full Editor process privileges — local development only, never expose to untrusted callers.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        timeout: { type: "number", description: "Max wait time in ms for file upload (default: 30000)" },
+                        code: { type: "string", description: "JavaScript code. Use `return <expr>` to return a value. Async / await supported." },
+                        timeoutMs: { type: "number", description: "Max execution time in ms (default: 5000)." },
+                        returnLogs: { type: "boolean", description: "If true, captures console.log/warn/error during execution and returns them in `logs` (default: false)." },
                     },
-                },
-            },
-            {
-                name: "debug_batch_screenshot",
-                description: "Navigate to multiple pages and take a screenshot of each. Requires game preview running with GameDebugClient. Returns an array of screenshot file paths.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        pages: {
-                            type: "array",
-                            items: { type: "string" },
-                            description: "List of page names to screenshot (e.g. ['HomePageView', 'ShopPageView'])",
-                        },
-                        delay: { type: "number", description: "Delay in ms between navigate and screenshot (default: 1000)" },
-                        maxWidth: { type: "number", description: "Max width for screenshot resize (default: 960)" },
-                    },
-                    required: ["pages"],
+                    required: ["code"],
                 },
             },
             {
@@ -224,33 +194,24 @@ export class DebugTools implements ToolCategory {
     async execute(toolName: string, args: Record<string, any>): Promise<ToolResult> {
         try {
             switch (toolName) {
-                case "debug_get_editor_info":
-                    return this.getEditorInfo();
                 case "debug_list_messages":
                     return this.listMessages(args.target);
                 case "debug_execute_script":
                     return this.executeScript(args.method, args.args || []);
-                case "debug_get_console_logs":
-                    return this.getConsoleLogs(args.count || 50, args.level, args.source);
-                case "debug_clear_console":
-                    Editor.Message.send("console", "clear");
-                    // Clear scene process log buffer
-                    await Editor.Message.request("scene", "execute-scene-script", {
-                        name: "cocos-creator-mcp",
-                        method: "clearConsoleLogs",
-                        args: [],
-                    }).catch(() => {});
-                    // Clear game preview log buffer
-                    clearGameLogs();
-                    return ok({ success: true });
-                case "debug_list_extensions":
-                    return this.listExtensions();
-                case "debug_get_project_logs":
-                    return this.getProjectLogs(args.lines || 100);
-                case "debug_search_project_logs":
-                    return this.searchProjectLogs(args.pattern);
-                case "debug_get_log_file_info":
-                    return this.getLogFileInfo();
+                case "read_console":
+                    return this.readConsole({
+                        action: args.action || "get",
+                        types: parseMaybeJson(args.types),
+                        sources: parseMaybeJson(args.sources),
+                        count: args.count || 50,
+                        includeStacktrace: args.includeStacktrace ?? false,
+                        since: args.since,
+                        search: args.search,
+                    });
+                case "debug_logs":
+                    return this.handleLogsAction(args);
+                case "debug_extension":
+                    return this.handleExtensionAction(args);
                 case "debug_query_devices": {
                     const devices = await (Editor.Message.request as any)("device", "query").catch(() => []);
                     return ok({ success: true, devices });
@@ -260,26 +221,53 @@ export class DebugTools implements ToolCategory {
                     return ok({ success: true, url: args.url });
                 case "debug_game_command":
                     return this.gameCommand(args.type || args.command, parseMaybeJson(args.args), args.timeout || 5000, args.maxWidth, args.imageFormat);
-                case "debug_screenshot":
-                    return this.takeScreenshot(args.savePath, args.maxWidth);
+                case "debug_screenshot": {
+                    const target = args.target || "window";
+                    if (target === "window") return this.takeScreenshot(args.savePath, args.maxWidth);
+                    if (target === "pages") {
+                        if (!Array.isArray(args.pages)) return err("debug_screenshot(pages): 'pages' array is required");
+                        return this.batchScreenshot(args.pages, args.delay || 1000, args.maxWidth);
+                    }
+                    return err(`Unknown debug_screenshot target: ${target}. Expected 'window' or 'pages'.`);
+                }
                 case "debug_preview":
                     return this.handlePreview(args.action || "start", args.waitForReady, args.waitTimeout || 15000);
                 case "debug_clear_code_cache":
                     return this.clearCodeCache();
-                case "debug_reload_extension":
-                    return this.reloadExtension();
                 case "debug_validate_scene":
                     return this.validateScene();
-                case "debug_get_extension_info":
-                    return this.getExtensionInfo(args.name);
-                case "debug_batch_screenshot":
-                    return this.batchScreenshot(args.pages, args.delay || 1000, args.maxWidth);
-                case "debug_record_start":
-                    return this.gameCommand("record_start", { fps: args.fps, quality: args.quality, coefficient: args.coefficient, videoBitsPerSecond: args.videoBitsPerSecond, format: args.format, savePath: args.savePath }, 5000);
-                case "debug_record_stop":
-                    return this.gameCommand("record_stop", undefined, args.timeout || 30000);
+                case "debug_record":
+                    if (args.action === "start") {
+                        return this.gameCommand("record_start", {
+                            fps: args.fps, quality: args.quality, coefficient: args.coefficient,
+                            videoBitsPerSecond: args.videoBitsPerSecond, format: args.format, savePath: args.savePath,
+                        }, 5000);
+                    }
+                    if (args.action === "stop") {
+                        return this.gameCommand("record_stop", undefined, args.timeout || 30000);
+                    }
+                    return err(`Unknown debug_record action: ${args.action}. Expected 'start' or 'stop'.`);
                 case "debug_wait_compile":
                     return this.waitCompile(args.timeout || 15000, args.clean ?? false);
+                case "execute_editor_script": {
+                    if (typeof args.code !== "string" || args.code.length === 0) {
+                        return err("execute_editor_script: 'code' is required and must be a non-empty string");
+                    }
+                    try {
+                        const result = await Editor.Message.request("scene", "execute-scene-script", {
+                            name: "cocos-creator-mcp",
+                            method: "executeEditorScript",
+                            args: [{
+                                code: args.code,
+                                timeoutMs: args.timeoutMs,
+                                returnLogs: args.returnLogs,
+                            }],
+                        });
+                        return ok(result);
+                    } catch (e: any) {
+                        return err(e.message || String(e));
+                    }
+                }
                 default:
                     return err(`Unknown tool: ${toolName}`);
             }
@@ -334,51 +322,178 @@ export class DebugTools implements ToolCategory {
         return ok(result);
     }
 
-    private async getConsoleLogs(count: number, level?: string, source?: string): Promise<ToolResult> {
-        // 1. Try Editor's native console API first (may be supported in future CocosCreator versions)
-        if (!source) {
-            try {
-                const logs = await (Editor.Message.request as any)("console", "query-last-logs", count);
-                if (Array.isArray(logs) && logs.length > 0) {
-                    return ok({ success: true, logs, source: "editor-api", note: "Using native Editor console API" });
-                }
-            } catch { /* Not supported in this version — use fallback */ }
+    private async readConsole(opts: {
+        action: string;
+        types?: string[];
+        sources?: string[];
+        count: number;
+        includeStacktrace: boolean;
+        since?: string;
+        search?: string;
+    }): Promise<ToolResult> {
+        const allowedSources = new Set(["editor", "scene", "game"]);
+        const sources = (opts.sources && opts.sources.length > 0)
+            ? opts.sources.filter(s => allowedSources.has(s))
+            : ["editor", "scene", "game"];
+
+        if (opts.action === "clear") {
+            const cleared: string[] = [];
+            if (sources.includes("editor")) {
+                try { Editor.Message.send("console", "clear"); cleared.push("editor"); } catch { /* ignore */ }
+            }
+            if (sources.includes("scene")) {
+                try {
+                    await Editor.Message.request("scene", "execute-scene-script", {
+                        name: "cocos-creator-mcp",
+                        method: "clearConsoleLogs",
+                        args: [],
+                    });
+                    cleared.push("scene");
+                } catch { /* scene not available */ }
+            }
+            if (sources.includes("game")) {
+                clearGameLogs();
+                cleared.push("game");
+            }
+            return ok({ success: true, action: "clear", cleared });
         }
 
-        // 2. Fallback: collect from scene process buffer + game preview buffer
-        let sceneLogs: any[] = [];
-        let gameLogs: any[] = [];
+        if (opts.action !== "get") {
+            return err(`Unknown action: ${opts.action}. Expected 'get' or 'clear'.`);
+        }
 
-        // 2a. Scene process logs (console wrapper in scene.ts)
-        if (!source || source === "scene") {
+        const entries: Array<{ timestamp: string; source: string; type: string; message: string; stacktrace?: string }> = [];
+
+        // scene source
+        if (sources.includes("scene")) {
             try {
                 const result = await Editor.Message.request("scene", "execute-scene-script", {
                     name: "cocos-creator-mcp",
                     method: "getConsoleLogs",
-                    args: [count * 2, level], // request more, will trim after merge
+                    args: [opts.count * 2, undefined], // request more, filter after merge
                 });
                 if (result?.logs) {
-                    sceneLogs = result.logs.map((l: any) => ({ ...l, source: "scene" }));
+                    for (const l of result.logs) {
+                        entries.push({
+                            timestamp: l.timestamp,
+                            source: "scene",
+                            type: normalizeType(l.level),
+                            message: l.message,
+                            stacktrace: l.stacktrace,
+                        });
+                    }
                 }
             } catch { /* scene not available */ }
         }
 
-        // 2b. Game preview logs (received via POST /log endpoint)
-        if (!source || source === "game") {
-            const gameResult = getGameLogs(count * 2, level);
-            gameLogs = gameResult.logs.map((l: any) => ({ ...l, source: "game" }));
+        // game source
+        if (sources.includes("game")) {
+            const gameResult = getGameLogs(opts.count * 2);
+            for (const l of gameResult.logs) {
+                entries.push({
+                    timestamp: l.timestamp,
+                    source: "game",
+                    type: normalizeType(l.level),
+                    message: l.message,
+                    stacktrace: (l as any).stacktrace,
+                });
+            }
         }
 
-        // Merge and sort by timestamp, take last `count`
-        const merged = [...sceneLogs, ...gameLogs]
-            .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-            .slice(-count);
+        // editor source
+        if (sources.includes("editor")) {
+            let viaApi = false;
+            // 1. Try native console API first
+            try {
+                const logs = await (Editor.Message.request as any)("console", "query-last-logs", opts.count * 2);
+                if (Array.isArray(logs) && logs.length > 0) {
+                    viaApi = true;
+                    for (const l of logs) {
+                        entries.push({
+                            timestamp: l.timestamp || new Date().toISOString(),
+                            source: "editor",
+                            type: normalizeType(l.type || l.level),
+                            message: l.message || String(l),
+                            stacktrace: l.stack || l.stacktrace,
+                        });
+                    }
+                }
+            } catch { /* not supported in this version → fallback */ }
 
-        return ok({
-            success: true,
-            logs: merged,
-            total: { scene: sceneLogs.length, game: (source === "scene" ? 0 : gameLogs.length) },
-        });
+            // 2. Fallback: parse project.log tail for compile error / warning patterns
+            if (!viaApi) {
+                try {
+                    const parsed = await readProjectLogTail(opts.count * 2);
+                    for (const e of parsed) {
+                        entries.push({ ...e, source: "editor" });
+                    }
+                } catch { /* project.log unavailable */ }
+            }
+        }
+
+        // Apply filters
+        let filtered = entries;
+        if (opts.types && opts.types.length > 0) {
+            const allow = new Set(opts.types.map(normalizeType));
+            filtered = filtered.filter(e => allow.has(e.type));
+        }
+        if (opts.since) {
+            filtered = filtered.filter(e => e.timestamp > opts.since!);
+        }
+        if (opts.search) {
+            let re: RegExp;
+            try { re = new RegExp(opts.search, "i"); }
+            catch { re = new RegExp(escapeRegex(opts.search), "i"); }
+            filtered = filtered.filter(e => re.test(e.message));
+        }
+        if (!opts.includeStacktrace) {
+            filtered = filtered.map(({ stacktrace, ...rest }) => rest);
+        }
+
+        // Sort by timestamp ascending, take last `count`
+        filtered.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+        const result = filtered.slice(-opts.count);
+
+        const counts = {
+            editor: entries.filter(e => e.source === "editor").length,
+            scene: entries.filter(e => e.source === "scene").length,
+            game: entries.filter(e => e.source === "game").length,
+            total: result.length,
+        };
+
+        return ok({ success: true, action: "get", entries: result, counts });
+    }
+
+    /** debug_logs dispatcher (v2.0.0). */
+    private async handleLogsAction(args: Record<string, any>): Promise<ToolResult> {
+        const action = args.action || "get";
+        switch (action) {
+            case "get":
+                return this.getProjectLogs(args.lines || 100);
+            case "search":
+                if (!args.pattern) return err("debug_logs(search): 'pattern' is required");
+                return this.searchProjectLogs(args.pattern);
+            case "info":
+                return this.getLogFileInfo();
+            default:
+                return err(`Unknown debug_logs action: ${action}. Expected get / search / info.`);
+        }
+    }
+
+    /** debug_extension dispatcher (v2.0.0). */
+    private async handleExtensionAction(args: Record<string, any>): Promise<ToolResult> {
+        const action = args.action || "list";
+        switch (action) {
+            case "list":
+                return this.listExtensions();
+            case "info":
+                if (!args.name) return err("debug_extension(info): 'name' is required");
+                return this.getExtensionInfo(args.name);
+            case "reload":
+                return this.reloadExtension();
+            default:
+                return err(`Unknown debug_extension action: ${action}. Expected list / info / reload.`);
+        }
     }
 
     private async listExtensions(): Promise<ToolResult> {
@@ -801,4 +916,93 @@ export class DebugTools implements ToolCategory {
             return err(e.message || String(e));
         }
     }
+}
+
+/** Normalize various level / type spellings to a canonical "log"|"info"|"warn"|"error" string. */
+function normalizeType(raw: any): string {
+    const s = String(raw ?? "").toLowerCase();
+    if (s === "warning") return "warn";
+    if (s === "err") return "error";
+    if (s === "log" || s === "info" || s === "warn" || s === "error") return s;
+    return "log";
+}
+
+/** Escape a string so it can be embedded into a RegExp literally. */
+function escapeRegex(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * project.log の末尾を読み、Cocos Creator が書き出す compile error / warning /
+ * generic message を構造化エントリに変換する。
+ *
+ * Cocos Creator が project.log に書き出す代表的なパターン:
+ *   [11:22:33] [info] message...
+ *   [11:22:33] [warn] message...
+ *   [11:22:33] [error] message... (TS2304: Cannot find name 'Foo' など)
+ *   [Scene] [error] file: assets/.../Foo.ts(12,5)
+ *
+ * Editor バージョンや locale により書式は変わる可能性があるので、行頭の
+ * `[ts] [level]` パターンと、`error TS\d+:` の TypeScript エラー、
+ * `[level]` 単独行など複数パターンを許容する。
+ */
+async function readProjectLogTail(maxEntries: number): Promise<Array<{ timestamp: string; type: string; message: string; stacktrace?: string }>> {
+    const fs = require("fs");
+    const path = require("path");
+    const logPath = path.join(Editor.Project.tmpDir, "logs", "project.log");
+    if (!fs.existsSync(logPath)) return [];
+
+    const stat = fs.statSync(logPath);
+    // 末尾 256KB を読む（compile error は大きくないので十分）
+    const READ_BYTES = 256 * 1024;
+    const start = Math.max(0, stat.size - READ_BYTES);
+    const fd = fs.openSync(logPath, "r");
+    const buffer = Buffer.alloc(stat.size - start);
+    fs.readSync(fd, buffer, 0, buffer.length, start);
+    fs.closeSync(fd);
+    const text = buffer.toString("utf8");
+
+    const lines = text.split(/\r?\n/);
+    // 部分行（先頭行は切れている可能性）を捨てる
+    if (start > 0 && lines.length > 0) lines.shift();
+
+    const entries: Array<{ timestamp: string; type: string; message: string; stacktrace?: string }> = [];
+    const lineRe = /^\[(\d{2}:\d{2}:\d{2}(?:\.\d+)?)\]\s*(?:\[([^\]]+)\])?\s*\[?(log|info|warn|warning|error)\]?\s*(.*)$/i;
+    const tsErrRe = /\berror\s+TS\d+:\s*/i;
+    const today = new Date();
+    const isoDate = today.toISOString().slice(0, 10);
+
+    let pending: { timestamp: string; type: string; message: string; stacktrace?: string } | null = null;
+
+    for (const raw of lines) {
+        const line = raw.replace(/\[[0-9;]*m/g, ""); // strip ANSI color codes
+        if (!line.trim()) continue;
+
+        const m = line.match(lineRe);
+        if (m) {
+            if (pending) entries.push(pending);
+            const [, time, tag, level, body] = m;
+            const ts = `${isoDate}T${time}${time.length === 8 ? ".000" : ""}Z`;
+            pending = {
+                timestamp: ts,
+                type: normalizeType(level),
+                message: tag ? `[${tag}] ${body}` : body,
+            };
+        } else if (tsErrRe.test(line)) {
+            // TypeScript エラー単独行（タイムスタンプなし）
+            if (pending) entries.push(pending);
+            pending = {
+                timestamp: new Date().toISOString(),
+                type: "error",
+                message: line.trim(),
+            };
+        } else if (pending) {
+            // 継続行 — stacktrace に追加
+            pending.stacktrace = pending.stacktrace ? `${pending.stacktrace}\n${line}` : line;
+        }
+    }
+    if (pending) entries.push(pending);
+
+    // 末尾 maxEntries 件
+    return entries.slice(-maxEntries);
 }

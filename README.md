@@ -4,22 +4,20 @@
 
 AI assistants like Claude can control Cocos Creator editor through this extension — creating nodes, editing scenes, managing prefabs, building projects, and more.
 
-## Features
+## Features (v2.0.0)
 
-- **164 Tools** across 13 categories — comprehensive editor automation
-- **Streamable HTTP (SSE)** — Native support for MCP's Streamable HTTP transport
-- **JSON-RPC 2.0** — Standard MCP protocol compliance
-- **Prefab Property Persistence** — Component properties are correctly preserved when saving prefabs
-- **Preview in Editor** — Start editor preview programmatically (no manual button click needed)
-- **Screenshot Capture** — Capture editor window and game preview screenshots (WebP / PNG)
-- **Video Recording** — Record game preview canvas to video (MP4 / WebM) via Preview Recorder panel
-- **Game Command Control** — Send commands to running game preview (screenshot, click, navigate, state, inspect)
+- **~73 Tools** organized as `category_action` patterns — token-efficient for LLM clients
+- **12 MCP Resources** (`cocos://`) — read-only data exposed via URI, separate from tools
+- **`execute_editor_script`** — escape hatch for arbitrary editor-side JavaScript (async/await supported)
+- **`read_console`** — unified Editor/Scene/Game console reader (captures compile errors, runtime errors, console.log)
+- **Transparent value references** — `db://` asset paths, `{path}`/`{guid}` objects, enum names, `cc.Vec3/Color/Size` plain objects all auto-resolved
+- **Streamable HTTP (SSE)** — Native MCP transport
+- **JSON-RPC 2.0** — Standard MCP protocol
+- **Prefab Property Persistence** — Component properties preserved across saves
+- **Preview in Editor** / **Screenshot** / **Video Recording** / **Game Command Control**
 - **Client Scripts** — Drop-in TypeScript files for game preview integration (`client/`)
-- **Auto Start** — Server starts automatically when the extension loads
-- **Tool Call Logging** — All tool invocations logged with timing for debugging
-- **UUID Validation** — Input validation helpers for better error messages
-- **i18n** — English, Japanese, Chinese
-- **Regression Tests** — 200+ assertions covering core tool flows
+- **Auto Start** / **Tool Call Logging** / **i18n** (en/ja/zh)
+- **357+ Regression Test Assertions** — all real-invocation + side-effect verification
 
 ## Quick Start
 
@@ -108,265 +106,119 @@ clients can still complete a pro-forma flow on localhost.
 
 ```bash
 curl http://127.0.0.1:3000/health
-# {"status":"ok","tools":164}
+# {"status":"ok","tools":64}
 ```
 
-## Available Tools (164)
+## Available Tools (~64)
+
+v2.0.0 集約後の構成。各カテゴリは `category_action` パターンで action を切り替える単一ツールに統合されています (旧 v1 の 166 ツールから 61% 削減)。
 
 <details>
-<summary><strong>Scene (6)</strong> — Scene lifecycle and hierarchy</summary>
+<summary><strong>Scene (12)</strong></summary>
 
-| Tool | Description |
-|------|-------------|
-| `scene_get_hierarchy` | Get the node tree (with optional component info) |
-| `scene_open` | Open a scene by UUID or db:// path |
-| `scene_save` | Save the current scene |
-| `scene_get_list` | List all .scene files |
-| `scene_close` | Close the current scene |
-| `scene_get_current` | Get name and UUID of the current scene |
+- `scene_manage(open/save/close/list/current/hierarchy)`
+- `scene_clipboard(copy/paste/cut)`
+- `scene_undo(snapshot/snapshot_abort/begin/end/cancel)`
+- `scene_array(move/remove)`
+- `scene_reset(transform/property/component/restore_prefab)`
+- `scene_query(dirty/ready/classes/components/component_has_script/nodes_by_asset/scene_bounds)`
+- `scene_create`, `scene_save_as`, `scene_set_parent`, `scene_soft_reload`
+- `scene_execute_script`, `scene_execute_component_method`
 </details>
 
 <details>
-<summary><strong>Scene Advanced (30)</strong> — Undo, clipboard, queries, property manipulation</summary>
+<summary><strong>View (3)</strong> — Scene view (gizmo / settings / camera)</summary>
 
-| Tool | Description |
-|------|-------------|
-| `scene_execute_script` | Execute a custom scene script method |
-| `scene_snapshot` | Take a snapshot for undo |
-| `scene_snapshot_abort` | Abort the current undo snapshot |
-| `scene_begin_undo` | Begin recording undo operations |
-| `scene_end_undo` | End undo recording |
-| `scene_cancel_undo` | Cancel undo recording |
-| `scene_query_dirty` | Check if scene has unsaved changes |
-| `scene_query_ready` | Check if scene is fully loaded |
-| `scene_query_classes` | List all available component classes |
-| `scene_query_components` | Query components for a node |
-| `scene_query_component_has_script` | Check if a component has a script file |
-| `scene_query_node_tree` | Get raw node tree from editor |
-| `scene_query_node` | Get full property dump of a node |
-| `scene_query_component` | Get full property dump of a component |
-| `scene_query_nodes_by_asset` | Find nodes referencing an asset |
-| `scene_query_scene_bounds` | Get scene bounding rect |
-| `scene_soft_reload` | Soft reload scene |
-| `scene_reset_node_transform` | Reset transform to default |
-| `scene_reset_property` | Reset a specific property to default |
-| `scene_reset_component` | Reset a component to defaults |
-| `scene_copy_node` | Copy node to clipboard |
-| `scene_paste_node` | Paste node from clipboard |
-| `scene_cut_node` | Cut node to clipboard |
-| `scene_create` | Create a new empty scene |
-| `scene_save_as` | Save scene to a new file |
-| `scene_set_parent` | Reparent node(s) with official API |
-| `scene_restore_prefab` | Restore prefab node to original state |
-| `scene_execute_component_method` | Call a method on a component |
-| `scene_move_array_element` | Reorder array property element |
-| `scene_remove_array_element` | Remove array property element |
+- `view_gizmo(set_tool|get_tool|set_pivot|get_pivot|set_coordinate|get_coordinate)`
+- `view_settings(set_mode|get_mode|set_grid|get_grid|set_icon3d|get_icon3d|set_icon_size|get_icon_size|status|reset)`
+- `view_camera(focus_on_nodes|align_with_view|align_view_with_node)`
+
+Note: 3.8.x で未対応の Editor API は graceful no-op で動作 (`note` を返す)。
 </details>
 
 <details>
-<summary><strong>Scene View (19)</strong> — Gizmo, camera, grid, viewport</summary>
+<summary><strong>Node (10)</strong></summary>
 
-| Tool | Description |
-|------|-------------|
-| `view_change_gizmo_tool` | Switch gizmo tool (move/rotate/scale/rect) |
-| `view_query_gizmo_tool` | Get current gizmo tool |
-| `view_change_gizmo_pivot` | Change pivot mode (center/pivot) |
-| `view_query_gizmo_pivot` | Get current pivot mode |
-| `view_change_gizmo_coordinate` | Change coordinate system (local/global) |
-| `view_query_gizmo_coordinate` | Get current coordinate system |
-| `view_change_mode_2d_3d` | Switch 2D/3D view |
-| `view_query_mode_2d_3d` | Get current view mode |
-| `view_set_grid_visible` | Show/hide grid |
-| `view_query_grid_visible` | Check grid visibility |
-| `view_set_icon_gizmo_3d` | Toggle 3D icon gizmos |
-| `view_query_icon_gizmo_3d` | Check 3D icon gizmo state |
-| `view_set_icon_gizmo_size` | Set icon gizmo size |
-| `view_query_icon_gizmo_size` | Get icon gizmo size |
-| `view_focus_on_node` | Focus camera on node(s) |
-| `view_align_with_view` | Align node with camera view |
-| `view_align_view_with_node` | Align camera with node |
-| `view_get_status` | Get all view settings at once |
-| `view_reset` | Reset scene view to default |
+- `node_manage(create/delete/duplicate/move)`
+- `node_create_tree` — 1 コールで階層生成
+- `node_set_property`, `node_set_transform`, `node_set_active`, `node_set_layout`
+- `node_get_info`, `node_find_by_name`, `node_get_all`, `node_detect_type`
 </details>
 
 <details>
-<summary><strong>Node (14)</strong> — Create, edit, move, delete nodes</summary>
+<summary><strong>Component (3)</strong></summary>
 
-| Tool | Description |
-|------|-------------|
-| `node_create` | Create node (with optional components) |
-| `node_get_info` | Get node details (position, scale, components) |
-| `node_find_by_name` | Find nodes by name |
-| `node_set_property` | Set node property |
-| `node_set_transform` | Set position/rotation/scale at once |
-| `node_set_active` | Set node visibility |
-| `node_set_layer` | Set node layer |
-| `node_delete` | Delete node |
-| `node_move` | Move node to new parent |
-| `node_duplicate` | Duplicate node |
-| `node_get_all` | List all nodes |
-| `node_detect_type` | Detect node type (2D/3D/Node) |
-| `node_create_tree` | Create a node hierarchy in one call (v1.6) |
-| `node_set_layout` | Set UITransform + Widget + color/opacity at once (v1.13) |
+- `component_manage(add/remove/available/enum)`
+- `component_set_property` — Reflection-based. Supports asset path / `{path}` / `{guid}` / enum name / `cc.Vec3`/`Color`/`Size` plain object forms (see Value Reference Forms section)
+- `component_auto_bind` — auto-match `@property` fields to descendant nodes by name
 </details>
 
 <details>
-<summary><strong>Component (8)</strong> — Add, remove, configure components</summary>
+<summary><strong>Prefab (7)</strong></summary>
 
-| Tool | Description |
-|------|-------------|
-| `component_add` | Add component (e.g. `cc.Label`, `cc.Sprite`) |
-| `component_remove` | Remove component |
-| `component_get_components` | List components on node |
-| `component_set_property` | Set component property (Label.string, fontSize, etc.) |
-| `component_get_info` | Get full component dump by UUID |
-| `component_get_available` | List all available component classes |
-| `component_auto_bind` | Auto-match `@property` fields to nodes by name (v1.12) |
-| `component_query_enum` | Query enum values of a component property (v1.6) |
+- `prefab_edit(open/close)`
+- `prefab_create(mode: simple/replace/from_spec)` — extract / extract-and-replace / build-from-spec all unified
+- `prefab_instantiate`, `prefab_update`, `prefab_revert`, `prefab_duplicate`, `prefab_validate`
 </details>
 
 <details>
-<summary><strong>Prefab (12)</strong> — Prefab lifecycle and validation</summary>
+<summary><strong>Asset (2)</strong></summary>
 
-| Tool | Description |
-|------|-------------|
-| `prefab_list` | List all prefabs |
-| `prefab_create` | Create prefab from node (properties preserved) |
-| `prefab_instantiate` | Instantiate prefab into scene |
-| `prefab_get_info` | Get prefab asset info |
-| `prefab_update` | Apply prefab changes |
-| `prefab_revert` | Revert prefab instance to original |
-| `prefab_duplicate` | Copy prefab to new path |
-| `prefab_validate` | Validate prefab for broken references |
-| `prefab_open` | Open prefab for editing (v1.5) |
-| `prefab_close` | Close prefab editing mode and return to scene (v1.5) |
-| `prefab_create_and_replace` | Create prefab and replace instance in one call (v1.5) |
-| `prefab_create_from_spec` | Create node tree + auto-bind + prefab_create in one call (v1.12) |
+- `asset_manage(create/delete/move/copy/save/reimport/import/save_meta/open_external)`
+- `asset_query(path/uuid/url/details/dependencies/users/missing/ready/generate_url)`
 </details>
 
 <details>
-<summary><strong>Asset (18)</strong> — CRUD, queries, metadata, dependencies</summary>
+<summary><strong>Project (6)</strong></summary>
 
-| Tool | Description |
-|------|-------------|
-| `asset_create` | Create new asset |
-| `asset_delete` | Delete asset |
-| `asset_move` | Move/rename asset |
-| `asset_copy` | Copy asset |
-| `asset_save` | Save asset |
-| `asset_reimport` | Re-import asset |
-| `asset_import` | Import external file into project |
-| `asset_query_path` | Get file path for UUID |
-| `asset_query_uuid` | Get UUID for path |
-| `asset_query_url` | Get URL for UUID |
-| `asset_get_details` | Get asset metadata |
-| `asset_get_dependencies` | Get asset dependencies |
-| `asset_open_external` | Open in external editor |
-| `asset_save_meta` | Save asset meta/importer settings |
-| `asset_generate_available_url` | Generate non-conflicting asset path |
-| `asset_query_ready` | Check if asset DB is ready |
-| `asset_query_users` | Find assets that reference this asset |
-| `asset_query_missing` | Check for missing references |
+- `project_refresh_assets`, `project_get_asset_info`, `project_find_asset`
+- `project_get_settings`, `project_set_settings`, `project_query_scripts`
+
+For project name / path / engine info, use the `cocos://project/*` resources.
 </details>
 
 <details>
-<summary><strong>Project (8)</strong> — Project info, settings, engine</summary>
+<summary><strong>Debug (15)</strong></summary>
 
-| Tool | Description |
-|------|-------------|
-| `project_get_info` | Get project name and path |
-| `project_refresh_assets` | Refresh asset database |
-| `project_get_asset_info` | Get asset info by UUID |
-| `project_find_asset` | Find assets by glob pattern |
-| `project_get_settings` | Get project settings |
-| `project_set_settings` | Set a project setting |
-| `project_get_engine_info` | Get engine version and paths |
-| `project_query_scripts` | Query all script plugins |
+**Console / scripts:** `read_console`, `execute_editor_script`, `debug_execute_script`, `debug_list_messages`.
+**Logs / extension / record:** `debug_logs(get/search/info)`, `debug_extension(list/info/reload)`, `debug_record(start/stop)`.
+**Editor / preview:** `debug_validate_scene`, `debug_clear_code_cache`, `debug_wait_compile`, `debug_query_devices`, `debug_open_url`, `debug_preview`, `debug_screenshot(target: window/pages)`, `debug_game_command`.
 </details>
 
 <details>
-<summary><strong>Preferences (4)</strong> — Editor preferences</summary>
+<summary><strong>Preferences / Builder / Server (3)</strong></summary>
 
-| Tool | Description |
-|------|-------------|
-| `preferences_get` | Get preference value |
-| `preferences_set` | Set preference value |
-| `preferences_get_all` | Get all preferences for a protocol |
-| `preferences_reset` | Reset preference to default |
+- `preferences_manage(get/set/get_all/reset)`
+- `builder_manage(open_panel/get_settings/query_tasks/run_preview/stop_preview)`
+- `server_status(get/ips/port/build_hash/connectivity/interfaces/code_sync)`
 </details>
 
 <details>
-<summary><strong>Debug (22)</strong> — Editor info, logs, preview, screenshots, recording, game control</summary>
+<summary><strong>Reference Image (3)</strong></summary>
 
-| Tool | Description |
-|------|-------------|
-| `debug_get_editor_info` | Get editor version and environment |
-| `debug_list_messages` | List available Editor messages |
-| `debug_execute_script` | Execute scene script method |
-| `debug_get_console_logs` | Get console log entries (scene + game preview) |
-| `debug_clear_console` | Clear editor console and log buffers |
-| `debug_preview` | Start Preview in Editor (play button) |
-| `debug_clear_code_cache` | Clear code cache (Developer > Cache) |
-| `debug_screenshot` | Capture editor window screenshot |
-| `debug_game_command` | Send command to game preview (screenshot/click/navigate/state/inspect) |
-| `debug_batch_screenshot` | Navigate to multiple pages and screenshot each |
-| `debug_record_start` | Start recording game preview canvas (webm/mp4) |
-| `debug_record_stop` | Stop recording and save video file |
-| `debug_reload_extension` | Reload this MCP extension (after build) |
-| `debug_list_extensions` | List installed extensions |
-| `debug_get_extension_info` | Get extension details |
-| `debug_get_project_logs` | Read project log entries |
-| `debug_search_project_logs` | Search patterns in project logs |
-| `debug_get_log_file_info` | Get log file metadata |
-| `debug_validate_scene` | Validate scene for common issues |
-| `debug_query_devices` | List connected devices |
-| `debug_open_url` | Open URL in system browser |
-| `debug_wait_compile` | Wait for TypeScript compile to finish (v1.12) |
+- `refimage_manage(add/remove/clear_all/switch/refresh)`
+- `refimage_set(position/scale/opacity)`
+- `refimage_query(list/current)`
 </details>
 
-<details>
-<summary><strong>Server (7)</strong> — Editor server and network</summary>
+## Available Resources (12)
 
-| Tool | Description |
-|------|-------------|
-| `server_query_ip_list` | Get editor server IPs |
-| `server_query_port` | Get editor server port |
-| `server_get_status` | Get full server status |
-| `server_check_connectivity` | Check if editor server is reachable |
-| `server_get_network_interfaces` | Get network interface details |
-| `server_get_build_hash` | Get build hash of MCP dist files (v1.6) |
-| `server_check_code_sync` | Check if runtime matches dist hash (v1.6) |
-</details>
+MCP resources are read-only data sources exposed via URI, separate from tools. Listed via `resources/list` and `resources/templates/list`, fetched via `resources/read`.
 
-<details>
-<summary><strong>Builder (5)</strong> — Build and preview</summary>
-
-| Tool | Description |
-|------|-------------|
-| `builder_open_panel` | Open Build panel |
-| `builder_get_settings` | Get build configuration |
-| `builder_query_tasks` | Query active build tasks |
-| `builder_run_preview` | Start preview server |
-| `builder_stop_preview` | Stop preview server |
-</details>
-
-<details>
-<summary><strong>Reference Image (11)</strong> — Scene overlay images</summary>
-
-| Tool | Description |
-|------|-------------|
-| `refimage_add` | Add a reference image |
-| `refimage_remove` | Remove a reference image |
-| `refimage_list` | List all reference images |
-| `refimage_clear_all` | Remove all reference images |
-| `refimage_switch` | Switch active reference image |
-| `refimage_set_position` | Set image position |
-| `refimage_set_scale` | Set image scale |
-| `refimage_set_opacity` | Set image opacity |
-| `refimage_query_config` | Get reference image config |
-| `refimage_query_current` | Get current active image info |
-| `refimage_refresh` | Refresh image display |
-</details>
+| URI | Returns |
+|---|---|
+| `cocos://scene/current` | Current scene name + uuid |
+| `cocos://scene/list` | All .scene files |
+| `cocos://scene/hierarchy` | Current scene's node tree |
+| `cocos://node/{uuid}` | Full property dump of a node |
+| `cocos://node/{uuid}/components` | Component summary list |
+| `cocos://component/{uuid}` | Full property dump of a component |
+| `cocos://prefab/list` | All prefabs |
+| `cocos://prefab/{uuid}` | Prefab asset info |
+| `cocos://project/info` | Project name + path |
+| `cocos://project/engine` | Engine version + path |
+| `cocos://editor/info` | Cocos Creator editor info |
+| `cocos://asset/{uuid}` | Asset details |
 
 ## Client Scripts
 
@@ -413,7 +265,7 @@ Both scripts silently ignore when the MCP server is not running, so they are saf
 
 ## Console Log Capture (Details)
 
-`debug_get_console_logs` captures logs from two sources:
+`read_console` captures logs from three sources (`editor` / `scene` / `game`):
 
 ### Scene Process Logs (automatic)
 
@@ -468,7 +320,7 @@ setInterval(() => {
 ]
 ```
 
-Both scene and game logs are merged chronologically when retrieved via `debug_get_console_logs`. Each log entry includes a `source` field (`"scene"` or `"game"`) to distinguish the origin.
+Editor / scene / game entries are merged chronologically when retrieved via `read_console(action="get")`. Each entry includes a `source` field (`"editor"` / `"scene"` / `"game"`). Filter via `types: ["error", "warn"]`, `sources: ["scene"]`, `count`, `since`, `search`, or `includeStacktrace`. Clear with `read_console(action="clear")`.
 
 ## Configuration
 
@@ -512,6 +364,13 @@ node test/regression.mjs 3001    # custom port
 - **v1.12.0** — Prefab authoring efficiency: `component_auto_bind` (auto-match `@property` fields to node names), `debug_wait_compile` (wait for TS compile to finish), `prefab_create_from_spec` (create node tree + auto-bind + prefab_create in one call)
 - **v1.13.0** — `nodeName` parameter on component/get_components/auto_bind (no UUID required), `screenshot` auto-return option on `component_set_property` / `node_set_layout`, `node_set_layout` unified tool (UITransform + Widget + color/opacity in one call), dialog auto-response for untitled+dirty scenes, shared screenshot / node-resolve utilities
 - **v1.14.0** — Widget `_alignFlags` auto-recalc bug fix: `setProperty` / `setProperties` / `node_set_layout` now re-query `isAlign*` values from scene and rebuild `_alignFlags` bitmask after isAlign updates (Editor bug where bitmask was not updated automatically, causing prefabs to save with `_alignFlags: 45` stuck state). Also `node_create` component addition now waits for editor reflection (`waitForComponent`) to fix flaky tests
+- **v2.0.0** (BREAKING) — Major tool topology refactor: 166 → ~64 tools (-61%).
+  - New: `read_console` (Editor + Scene + Game console with type/source filters, compile error detection via project.log fallback), `execute_editor_script` (escape hatch for arbitrary editor JS), 12 MCP Resources (`cocos://scene/*`, `cocos://node/{uuid}`, `cocos://component/{uuid}`, `cocos://prefab/*`, `cocos://project/*`, `cocos://editor/info`, `cocos://asset/{uuid}`).
+  - Enhanced `component_set_property`: transparent value references — `db://...` asset paths, `{path}` / `{guid}` objects, enum names, `cc.Vec3/Vec2/Vec4/Color/Size` plain objects all auto-resolved.
+  - Aggregated tools into `category_action` patterns: `scene_manage`, `scene_clipboard`, `scene_undo`, `scene_array`, `scene_reset`, `scene_view_*`, `node_manage`, `component_manage`, `prefab_edit`, `asset_manage`, `asset_query`, `view_gizmo/settings/camera`, `refimage_manage/set/query`, `preferences_manage`, `builder_manage`, `server_status`, `debug_logs/extension/record`.
+  - Fixed `prefab_create_from_spec` asset-ref serialization bug — properties are now reapplied via Editor API after node tree build, so asset refs serialize as `{__uuid__, __expectedType__}` correctly. The post-processing workaround is no longer needed.
+  - Removed: read-only tools that have resource equivalents (`scene_query_node`, `scene_query_node_tree`, `scene_query_component`, `component_get_components`, `component_get_info`, `prefab_list`, `prefab_get_info`, `project_get_info`, `project_get_engine_info`, `debug_get_editor_info`) and v2 deprecated (`debug_get_console_logs`, `debug_clear_console`).
+  - See [MIGRATION.md](./MIGRATION.md) for the v1 → v2 mapping table. See [CHANGELOG.md](./CHANGELOG.md) for the full change log.
 
 ## Development
 
@@ -530,22 +389,60 @@ After building, reload the extension in Cocos Creator:
 - Cocos Creator 3.8+
 - Node.js 18+
 
+## Value Reference Forms (v2.0.0)
+
+`component_set_property` accepts multiple convenient forms for asset references, node references, enums, and structured value types. The MCP server resolves each to the correct Editor dump format internally.
+
+### Asset references
+
+```jsonc
+// All four forms are equivalent for a SpriteFrame field:
+{ "value": "<uuid>" }                                 // raw UUID
+{ "value": "db://assets/textures/foo.png" }           // asset path string
+{ "value": { "path": "db://assets/textures/foo.png" } }  // {path}
+{ "value": { "guid": "<uuid>" } }                     // {guid}
+```
+
+### Node / component references
+
+```jsonc
+// Resolves to a node by descendant path under the active scene root:
+{ "value": "@path:Canvas/Background" }
+
+// Or pass a node UUID directly — the property type is inferred from the schema:
+{ "value": "<node-uuid>" }
+```
+
+### Enum values
+
+```jsonc
+// Name (v2.0.0) — looked up against the property's enumList:
+{ "value": "HORIZONTAL" }
+
+// Numeric (still supported):
+{ "value": 1 }
+```
+
+### Structured value types (v2.0.0)
+
+```jsonc
+// cc.Vec3 / cc.Vec2 / cc.Vec4 — pass plain coordinates:
+{ "value": { "x": 100, "y": 50, "z": 0 } }
+
+// cc.Color — RGBA in 0-255 range:
+{ "value": { "r": 255, "g": 0, "b": 0, "a": 255 } }
+
+// cc.Size — width/height (or x/y) are both accepted:
+{ "value": { "width": 200, "height": 100 } }
+```
+
+These also work inside `prefab_create_from_spec`'s `spec.properties` because the asset-ref serialization bug was fixed in v2.0.0 (properties are now reapplied via the Editor API after the node tree is built).
+
 ## Known Limitations
 
 - **`scene_create`**: Does not work on Cocos Creator 3.8.x because the underlying `scene:new-scene` Editor message is not exposed on that version. As a workaround, create the `.scene` JSON file directly under `db://assets/` and call `project_refresh_assets` so the editor picks it up. See [#13](https://github.com/harady/cocos-creator-mcp/issues/13) for details.
 
-- **`prefab_create_from_spec` — asset refs are saved as raw UUID strings**:
-  When the spec's `properties` contains asset references like `cc.Sprite.spriteFrame` or `cc.Prefab` fields, they are serialized to the generated `.prefab` as raw UUID strings instead of the required `{__uuid__, __expectedType__}` object form. The Cocos runtime fails to resolve them (e.g. `Simple.updateUVs` throws every frame for a Sprite with unresolved spriteFrame). Workaround: post-process the generated `.prefab` files to wrap asset refs.
-
-  Example fix script:
-  ```js
-  // fix-prefab-asset-refs.js — run after prefab_create_from_spec
-  const re = /"_spriteFrame":\s*"([a-f0-9\-]+(?:@[a-z0-9]+)?)"/g;
-  content = content.replace(re, (_, uuid) =>
-    `"_spriteFrame": { "__uuid__": "${uuid}", "__expectedType__": "cc.SpriteFrame" }`
-  );
-  ```
-  The same pattern also applies when setting `cc.Prefab` fields via `component_set_property` — the value object form is ignored and the raw UUID is written. Direct `.prefab` JSON edit is the reliable workaround until fixed.
+- ~~**`prefab_create_from_spec` — asset refs are saved as raw UUID strings**~~ **(fixed in v2.0.0)** — Properties in `spec.properties` are now reapplied via the Editor API (`component_set_property`) after `buildNodeTree` completes, so asset refs serialize as `{__uuid__, __expectedType__}` correctly. The old workaround of post-processing `.prefab` files is no longer needed.
 
 ## License
 

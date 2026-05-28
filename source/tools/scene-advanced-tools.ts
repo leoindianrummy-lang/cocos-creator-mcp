@@ -22,84 +22,76 @@ export class SceneAdvancedTools implements ToolCategory {
                 },
             },
             {
-                name: "scene_snapshot",
-                description: "Take a snapshot of the current scene state (for undo).",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "scene_query_dirty",
-                description: "Check if the current scene has unsaved changes.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "scene_query_classes",
-                description: "Query all available component classes in the scene.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "scene_query_components",
-                description: "Query available components for a given node.",
+                name: "scene_clipboard",
+                description: "Clipboard ops on scene nodes. Actions: 'copy' (uuid), 'cut' (uuid), 'paste' (parentUuid).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        uuid: { type: "string", description: "Node UUID" },
+                        action: { type: "string", description: "'copy' | 'cut' | 'paste'" },
+                        uuid: { type: "string", description: "Source node UUID (action=copy|cut)" },
+                        parentUuid: { type: "string", description: "Destination parent UUID (action=paste)" },
                     },
-                    required: ["uuid"],
+                    required: ["action"],
                 },
             },
             {
-                name: "scene_query_node_tree",
-                description: "Query the raw node tree from the editor (alternative to scene_get_hierarchy).",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "scene_query_nodes_by_asset",
-                description: "Find all nodes that reference a given asset UUID.",
+                name: "scene_undo",
+                description: "Undo / snapshot recording. Actions: 'snapshot' (one-shot undo snapshot), 'snapshot_abort' (cancel current snapshot), 'begin' (begin-recording for a multi-step undo group), 'end' (end-recording = commit), 'cancel' (cancel-recording = discard).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        assetUuid: { type: "string", description: "Asset UUID to search for" },
+                        action: { type: "string", description: "'snapshot' | 'snapshot_abort' | 'begin' | 'end' | 'cancel'" },
                     },
-                    required: ["assetUuid"],
+                    required: ["action"],
+                },
+            },
+            {
+                name: "scene_array",
+                description: "Array property element ops. Actions: 'move' (uuid, path, target, offset — reorder by index delta) and 'remove' (uuid, path, index).",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        action: { type: "string", description: "'move' | 'remove'" },
+                        uuid: { type: "string", description: "Node or component UUID" },
+                        path: { type: "string", description: "Array property path" },
+                        target: { type: "number", description: "Current index (action=move)" },
+                        offset: { type: "number", description: "Move offset (action=move): +1 = down, -1 = up" },
+                        index: { type: "number", description: "Index to remove (action=remove)" },
+                    },
+                    required: ["action", "uuid", "path"],
+                },
+            },
+            {
+                name: "scene_reset",
+                description: "Reset a node, component, or property to defaults. Actions: 'transform' (uuid — node position/rotation/scale to identity), 'property' (uuid, path — single property), 'component' (uuid — component to defaults), 'restore_prefab' (uuid — revert prefab instance to original).",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        action: { type: "string", description: "'transform' | 'property' | 'component' | 'restore_prefab'" },
+                        uuid: { type: "string", description: "Target UUID (node for transform/restore_prefab, component for component, either for property)" },
+                        path: { type: "string", description: "Property path (action=property)" },
+                    },
+                    required: ["action", "uuid"],
+                },
+            },
+            {
+                name: "scene_query",
+                description: "Query scene state. Actions: 'dirty' (has unsaved changes?), 'ready' (scene fully loaded?), 'classes' (all component classes), 'components' (available components for a node — uuid required), 'component_has_script' (does a component class have a script file — name required), 'nodes_by_asset' (nodes referencing an asset — assetUuid required), 'scene_bounds' (current scene bounding rect). For full node/component dumps use cocos://node/{uuid} / cocos://component/{uuid} resources.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        action: { type: "string", description: "'dirty' | 'ready' | 'classes' | 'components' | 'component_has_script' | 'nodes_by_asset' | 'scene_bounds'" },
+                        uuid: { type: "string", description: "Node UUID (action=components)" },
+                        name: { type: "string", description: "Component class name (action=component_has_script)" },
+                        assetUuid: { type: "string", description: "Asset UUID (action=nodes_by_asset)" },
+                    },
+                    required: ["action"],
                 },
             },
             {
                 name: "scene_soft_reload",
                 description: "Soft reload the current scene without losing state.",
                 inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "scene_reset_node_transform",
-                description: "Reset a node's transform to default (position 0,0,0 / rotation 0,0,0 / scale 1,1,1).",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node UUID" },
-                    },
-                    required: ["uuid"],
-                },
-            },
-            {
-                name: "scene_copy_node",
-                description: "Copy a node to clipboard.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node UUID" },
-                    },
-                    required: ["uuid"],
-                },
-            },
-            {
-                name: "scene_paste_node",
-                description: "Paste node from clipboard under a parent.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        parentUuid: { type: "string", description: "Parent node UUID" },
-                    },
-                    required: ["parentUuid"],
-                },
             },
             {
                 name: "scene_create",
@@ -110,36 +102,6 @@ export class SceneAdvancedTools implements ToolCategory {
                         path: { type: "string", description: "Scene asset path (e.g. 'db://assets/scenes/NewScene.scene'). If omitted, uses editor's new-scene command." },
                         force: { type: "boolean", description: "Skip dirty-scene preflight check (may trigger modal save dialog)" },
                     },
-                },
-            },
-            {
-                name: "scene_cut_node",
-                description: "Cut a node to clipboard (removes from scene).",
-                inputSchema: {
-                    type: "object",
-                    properties: { uuid: { type: "string", description: "Node UUID" } },
-                    required: ["uuid"],
-                },
-            },
-            {
-                name: "scene_reset_property",
-                description: "Reset a specific property on a node or component to its default value.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node or component UUID" },
-                        path: { type: "string", description: "Property path (e.g. 'position', 'color')" },
-                    },
-                    required: ["uuid", "path"],
-                },
-            },
-            {
-                name: "scene_reset_component",
-                description: "Reset a component to its default state.",
-                inputSchema: {
-                    type: "object",
-                    properties: { uuid: { type: "string", description: "Component UUID" } },
-                    required: ["uuid"],
                 },
             },
             {
@@ -154,76 +116,6 @@ export class SceneAdvancedTools implements ToolCategory {
                     },
                     required: ["uuid", "method"],
                 },
-            },
-            {
-                name: "scene_move_array_element",
-                description: "Move an array element to a new position in a property.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node or component UUID" },
-                        path: { type: "string", description: "Array property path" },
-                        target: { type: "number", description: "Current index" },
-                        offset: { type: "number", description: "Move offset (+1 = down, -1 = up)" },
-                    },
-                    required: ["uuid", "path", "target", "offset"],
-                },
-            },
-            {
-                name: "scene_remove_array_element",
-                description: "Remove an element from an array property by index.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node or component UUID" },
-                        path: { type: "string", description: "Array property path" },
-                        index: { type: "number", description: "Index to remove" },
-                    },
-                    required: ["uuid", "path", "index"],
-                },
-            },
-            {
-                name: "scene_snapshot_abort",
-                description: "Abort the current undo snapshot.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "scene_query_ready",
-                description: "Check if the scene is fully loaded and ready.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "scene_query_component_has_script",
-                description: "Check if a component has an associated script file.",
-                inputSchema: {
-                    type: "object",
-                    properties: { name: { type: "string", description: "Component class name" } },
-                    required: ["name"],
-                },
-            },
-            {
-                name: "scene_restore_prefab",
-                description: "Restore a prefab node to its original prefab state.",
-                inputSchema: {
-                    type: "object",
-                    properties: { uuid: { type: "string", description: "Node UUID" } },
-                    required: ["uuid"],
-                },
-            },
-            {
-                name: "scene_begin_undo",
-                description: "Begin recording undo operations.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "scene_end_undo",
-                description: "End undo recording and save the undo step.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "scene_cancel_undo",
-                description: "Cancel the current undo recording.",
-                inputSchema: { type: "object", properties: {} },
             },
             {
                 name: "scene_save_as",
@@ -244,29 +136,6 @@ export class SceneAdvancedTools implements ToolCategory {
                     required: ["uuids", "parent"],
                 },
             },
-            {
-                name: "scene_query_node",
-                description: "Get a full property dump of a node (all serialized data).",
-                inputSchema: {
-                    type: "object",
-                    properties: { uuid: { type: "string", description: "Node UUID" } },
-                    required: ["uuid"],
-                },
-            },
-            {
-                name: "scene_query_component",
-                description: "Get a full property dump of a component by its UUID.",
-                inputSchema: {
-                    type: "object",
-                    properties: { uuid: { type: "string", description: "Component UUID" } },
-                    required: ["uuid"],
-                },
-            },
-            {
-                name: "scene_query_scene_bounds",
-                description: "Get the bounding rect of the current scene.",
-                inputSchema: { type: "object", properties: {} },
-            },
         ];
     }
 
@@ -277,82 +146,25 @@ export class SceneAdvancedTools implements ToolCategory {
                     return ok(await this.sceneScript(args.method, args.args || []));
                 case "scene_snapshot":
                     return ok(await (Editor.Message.request as any)("scene", "snapshot"));
-                case "scene_query_dirty": {
-                    const dirty = await (Editor.Message.request as any)("scene", "query-dirty");
-                    return ok({ success: true, dirty });
-                }
-                case "scene_query_classes": {
-                    const classes = await (Editor.Message.request as any)("scene", "query-classes");
-                    return ok({ success: true, classes });
-                }
-                case "scene_query_components": {
-                    const comps = await (Editor.Message.request as any)("scene", "query-components", args.uuid);
-                    return ok({ success: true, components: comps });
-                }
-                case "scene_query_node_tree": {
-                    const tree = await Editor.Message.request("scene", "query-node-tree");
-                    return ok({ success: true, tree });
-                }
-                case "scene_query_nodes_by_asset": {
-                    const nodes = await (Editor.Message.request as any)("scene", "query-nodes-by-asset-uuid", args.assetUuid);
-                    return ok({ success: true, nodes });
-                }
+                case "scene_query":
+                    return this.handleQuery(args);
                 case "scene_soft_reload":
                     await (Editor.Message.request as any)("scene", "soft-reload");
                     return ok({ success: true });
-                case "scene_reset_node_transform":
-                    return await this.resetTransform(args.uuid);
-                case "scene_copy_node":
-                    await (Editor.Message.request as any)("scene", "copy-node", args.uuid);
-                    return ok({ success: true, uuid: args.uuid });
-                case "scene_paste_node": {
-                    const result = await (Editor.Message.request as any)("scene", "paste-node", args.parentUuid);
-                    return ok({ success: true, result });
-                }
+                case "scene_clipboard":
+                    return this.handleClipboard(args);
+                case "scene_undo":
+                    return this.handleUndo(args);
+                case "scene_array":
+                    return this.handleArray(args);
+                case "scene_reset":
+                    return this.handleReset(args);
                 case "scene_create":
                     return this.createScene(args.path, !!args.force);
-                case "scene_cut_node":
-                    await (Editor.Message.request as any)("scene", "cut-node", args.uuid);
-                    return ok({ success: true, uuid: args.uuid });
-                case "scene_reset_property":
-                    await (Editor.Message.request as any)("scene", "reset-property", { uuid: args.uuid, path: args.path });
-                    return ok({ success: true });
-                case "scene_reset_component":
-                    await (Editor.Message.request as any)("scene", "reset-component", { uuid: args.uuid });
-                    return ok({ success: true });
                 case "scene_execute_component_method": {
                     const result = await (Editor.Message.request as any)("scene", "execute-component-method", { uuid: args.uuid, name: args.method, args: args.args || [] });
                     return ok({ success: true, result });
                 }
-                case "scene_move_array_element":
-                    await (Editor.Message.request as any)("scene", "move-array-element", { uuid: args.uuid, path: args.path, target: args.target, offset: args.offset });
-                    return ok({ success: true });
-                case "scene_remove_array_element":
-                    await (Editor.Message.request as any)("scene", "remove-array-element", { uuid: args.uuid, path: args.path, index: args.index });
-                    return ok({ success: true });
-                case "scene_snapshot_abort":
-                    await (Editor.Message.request as any)("scene", "snapshot-abort");
-                    return ok({ success: true });
-                case "scene_query_ready": {
-                    const ready = await (Editor.Message.request as any)("scene", "query-is-ready");
-                    return ok({ success: true, ready });
-                }
-                case "scene_query_component_has_script": {
-                    const hasScript = await (Editor.Message.request as any)("scene", "query-component-has-script", args.name);
-                    return ok({ success: true, name: args.name, hasScript });
-                }
-                case "scene_restore_prefab":
-                    await (Editor.Message.request as any)("scene", "restore-prefab", { uuid: args.uuid });
-                    return ok({ success: true, uuid: args.uuid });
-                case "scene_begin_undo":
-                    await (Editor.Message.request as any)("scene", "begin-recording");
-                    return ok({ success: true });
-                case "scene_end_undo":
-                    await (Editor.Message.request as any)("scene", "end-recording");
-                    return ok({ success: true });
-                case "scene_cancel_undo":
-                    await (Editor.Message.request as any)("scene", "cancel-recording");
-                    return ok({ success: true });
                 case "scene_save_as": {
                     const result = await (Editor.Message.request as any)("scene", "save-as-scene");
                     return ok({ success: true, result });
@@ -364,23 +176,129 @@ export class SceneAdvancedTools implements ToolCategory {
                         keepWorldTransform: args.keepWorldTransform || false,
                     });
                     return ok({ success: true });
-                case "scene_query_node": {
-                    const dump = await (Editor.Message.request as any)("scene", "query-node", args.uuid);
-                    return ok({ success: true, node: dump });
-                }
-                case "scene_query_component": {
-                    const dump = await (Editor.Message.request as any)("scene", "query-component", args.uuid);
-                    return ok({ success: true, component: dump });
-                }
-                case "scene_query_scene_bounds": {
-                    const bounds = await (Editor.Message.request as any)("scene", "query-scene-bounds");
-                    return ok({ success: true, bounds });
-                }
                 default:
                     return err(`Unknown tool: ${toolName}`);
             }
         } catch (e: any) {
             return err(e.message || String(e));
+        }
+    }
+
+    /** scene_query (v2.0.0) — 旧 scene_query_dirty/ready/classes/components/component_has_script/nodes_by_asset/scene_bounds を統合 */
+    private async handleQuery(args: Record<string, any>): Promise<ToolResult> {
+        switch (args.action) {
+            case "dirty": {
+                const dirty = await (Editor.Message.request as any)("scene", "query-dirty");
+                return ok({ success: true, action: args.action, dirty });
+            }
+            case "ready": {
+                const ready = await (Editor.Message.request as any)("scene", "query-is-ready");
+                return ok({ success: true, action: args.action, ready });
+            }
+            case "classes": {
+                const classes = await (Editor.Message.request as any)("scene", "query-classes");
+                return ok({ success: true, action: args.action, classes });
+            }
+            case "components": {
+                if (!args.uuid) return err("scene_query(components): 'uuid' is required");
+                const comps = await (Editor.Message.request as any)("scene", "query-components", args.uuid);
+                return ok({ success: true, action: args.action, components: comps });
+            }
+            case "component_has_script": {
+                if (!args.name) return err("scene_query(component_has_script): 'name' is required");
+                const hasScript = await (Editor.Message.request as any)("scene", "query-component-has-script", args.name);
+                return ok({ success: true, action: args.action, name: args.name, hasScript });
+            }
+            case "nodes_by_asset": {
+                if (!args.assetUuid) return err("scene_query(nodes_by_asset): 'assetUuid' is required");
+                const nodes = await (Editor.Message.request as any)("scene", "query-nodes-by-asset-uuid", args.assetUuid);
+                return ok({ success: true, action: args.action, nodes });
+            }
+            case "scene_bounds": {
+                const bounds = await (Editor.Message.request as any)("scene", "query-scene-bounds");
+                return ok({ success: true, action: args.action, bounds });
+            }
+            default:
+                return err(`Unknown scene_query action: ${args.action}. Expected dirty / ready / classes / components / component_has_script / nodes_by_asset / scene_bounds.`);
+        }
+    }
+
+    /** scene_clipboard (v2.0.0) */
+    private async handleClipboard(args: Record<string, any>): Promise<ToolResult> {
+        switch (args.action) {
+            case "copy":
+                if (!args.uuid) return err("scene_clipboard(copy): 'uuid' is required");
+                await (Editor.Message.request as any)("scene", "copy-node", args.uuid);
+                return ok({ success: true, action: args.action, uuid: args.uuid });
+            case "cut":
+                if (!args.uuid) return err("scene_clipboard(cut): 'uuid' is required");
+                await (Editor.Message.request as any)("scene", "cut-node", args.uuid);
+                return ok({ success: true, action: args.action, uuid: args.uuid });
+            case "paste":
+                if (!args.parentUuid) return err("scene_clipboard(paste): 'parentUuid' is required");
+                const r = await (Editor.Message.request as any)("scene", "paste-node", args.parentUuid);
+                return ok({ success: true, action: args.action, result: r });
+            default:
+                return err(`Unknown scene_clipboard action: ${args.action}`);
+        }
+    }
+
+    /** scene_undo (v2.0.0) */
+    private async handleUndo(args: Record<string, any>): Promise<ToolResult> {
+        switch (args.action) {
+            case "snapshot":
+                await (Editor.Message.request as any)("scene", "snapshot");
+                return ok({ success: true, action: args.action });
+            case "snapshot_abort":
+                await (Editor.Message.request as any)("scene", "snapshot-abort");
+                return ok({ success: true, action: args.action });
+            case "begin":
+                await (Editor.Message.request as any)("scene", "begin-recording");
+                return ok({ success: true, action: args.action });
+            case "end":
+                await (Editor.Message.request as any)("scene", "end-recording");
+                return ok({ success: true, action: args.action });
+            case "cancel":
+                await (Editor.Message.request as any)("scene", "cancel-recording");
+                return ok({ success: true, action: args.action });
+            default:
+                return err(`Unknown scene_undo action: ${args.action}`);
+        }
+    }
+
+    /** scene_array (v2.0.0) */
+    private async handleArray(args: Record<string, any>): Promise<ToolResult> {
+        switch (args.action) {
+            case "move":
+                await (Editor.Message.request as any)("scene", "move-array-element",
+                    { uuid: args.uuid, path: args.path, target: args.target, offset: args.offset });
+                return ok({ success: true, action: args.action });
+            case "remove":
+                await (Editor.Message.request as any)("scene", "remove-array-element",
+                    { uuid: args.uuid, path: args.path, index: args.index });
+                return ok({ success: true, action: args.action });
+            default:
+                return err(`Unknown scene_array action: ${args.action}`);
+        }
+    }
+
+    /** scene_reset (v2.0.0) */
+    private async handleReset(args: Record<string, any>): Promise<ToolResult> {
+        switch (args.action) {
+            case "transform":
+                return this.resetTransform(args.uuid);
+            case "property":
+                if (!args.path) return err("scene_reset(property): 'path' is required");
+                await (Editor.Message.request as any)("scene", "reset-property", { uuid: args.uuid, path: args.path });
+                return ok({ success: true, action: args.action });
+            case "component":
+                await (Editor.Message.request as any)("scene", "reset-component", { uuid: args.uuid });
+                return ok({ success: true, action: args.action });
+            case "restore_prefab":
+                await (Editor.Message.request as any)("scene", "restore-prefab", { uuid: args.uuid });
+                return ok({ success: true, action: args.action, uuid: args.uuid });
+            default:
+                return err(`Unknown scene_reset action: ${args.action}`);
         }
     }
 

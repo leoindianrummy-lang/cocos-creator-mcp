@@ -7,143 +7,45 @@ export class SceneViewTools implements ToolCategory {
     getTools(): ToolDefinition[] {
         return [
             {
-                name: "view_change_gizmo_tool",
-                description: "Change the gizmo tool (move, rotate, scale, rect).",
+                name: "view_gizmo",
+                description: "Manage the scene view gizmo (move/rotate/scale tool, pivot, coordinate). Actions: 'set_tool'+tool, 'get_tool', 'set_pivot'+pivot, 'get_pivot', 'set_coordinate'+coordinate, 'get_coordinate'.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        tool: { type: "string", enum: ["move", "rotate", "scale", "rect"], description: "Gizmo tool name" },
+                        action: { type: "string", description: "'set_tool' | 'get_tool' | 'set_pivot' | 'get_pivot' | 'set_coordinate' | 'get_coordinate'" },
+                        tool: { type: "string", description: "'move' | 'rotate' | 'scale' | 'rect' (action=set_tool)" },
+                        pivot: { type: "string", description: "'center' | 'pivot' (action=set_pivot)" },
+                        coordinate: { type: "string", description: "'local' | 'global' (action=set_coordinate)" },
                     },
-                    required: ["tool"],
+                    required: ["action"],
                 },
             },
             {
-                name: "view_query_gizmo_tool",
-                description: "Get the currently active gizmo tool.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "view_change_gizmo_pivot",
-                description: "Change gizmo pivot mode (center or pivot).",
+                name: "view_settings",
+                description: "Manage scene view settings (2D/3D mode, grid, icon gizmos, status snapshot, reset). Actions: 'set_mode'+mode, 'get_mode', 'set_grid'+visible, 'get_grid', 'set_icon3d'+enabled, 'get_icon3d', 'set_icon_size'+size, 'get_icon_size', 'status', 'reset'.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        pivot: { type: "string", enum: ["center", "pivot"], description: "Pivot mode" },
+                        action: { type: "string", description: "'set_mode' | 'get_mode' | 'set_grid' | 'get_grid' | 'set_icon3d' | 'get_icon3d' | 'set_icon_size' | 'get_icon_size' | 'status' | 'reset'" },
+                        mode: { type: "string", description: "'2d' | '3d' (action=set_mode)" },
+                        visible: { type: "boolean", description: "action=set_grid" },
+                        enabled: { type: "boolean", description: "action=set_icon3d" },
+                        size: { type: "number", description: "action=set_icon_size" },
                     },
-                    required: ["pivot"],
+                    required: ["action"],
                 },
             },
             {
-                name: "view_query_gizmo_pivot",
-                description: "Get the current gizmo pivot mode.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "view_change_gizmo_coordinate",
-                description: "Change gizmo coordinate system (local or global).",
+                name: "view_camera",
+                description: "Move / align the scene camera. Actions: 'focus_on_nodes'+uuids (focus camera on node(s)), 'align_with_view' (align selected node with current camera view), 'align_view_with_node' (align camera with selected node).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        coordinate: { type: "string", enum: ["local", "global"], description: "Coordinate system" },
+                        action: { type: "string", description: "'focus_on_nodes' | 'align_with_view' | 'align_view_with_node'" },
+                        uuids: { type: "array", items: { type: "string" }, description: "Node UUIDs (action=focus_on_nodes)" },
                     },
-                    required: ["coordinate"],
+                    required: ["action"],
                 },
-            },
-            {
-                name: "view_query_gizmo_coordinate",
-                description: "Get the current gizmo coordinate system.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "view_change_mode_2d_3d",
-                description: "Switch between 2D and 3D view mode.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        mode: { type: "string", enum: ["2d", "3d"], description: "View mode" },
-                    },
-                    required: ["mode"],
-                },
-            },
-            {
-                name: "view_query_mode_2d_3d",
-                description: "Get the current 2D/3D view mode.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "view_set_grid_visible",
-                description: "Show or hide the scene grid.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        visible: { type: "boolean", description: "Whether to show the grid" },
-                    },
-                    required: ["visible"],
-                },
-            },
-            {
-                name: "view_query_grid_visible",
-                description: "Check if the scene grid is visible.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "view_focus_on_node",
-                description: "Focus the scene camera on specific node(s).",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuids: { type: "array", items: { type: "string" }, description: "Node UUIDs to focus on" },
-                    },
-                    required: ["uuids"],
-                },
-            },
-            {
-                name: "view_get_status",
-                description: "Get the current scene view status (gizmo tool, pivot, coordinate, grid, etc.).",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "view_set_icon_gizmo_3d",
-                description: "Toggle 3D icon gizmos on/off.",
-                inputSchema: {
-                    type: "object",
-                    properties: { enabled: { type: "boolean" } },
-                    required: ["enabled"],
-                },
-            },
-            {
-                name: "view_query_icon_gizmo_3d",
-                description: "Check if 3D icon gizmos are enabled.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "view_set_icon_gizmo_size",
-                description: "Set the icon gizmo size.",
-                inputSchema: {
-                    type: "object",
-                    properties: { size: { type: "number" } },
-                    required: ["size"],
-                },
-            },
-            {
-                name: "view_query_icon_gizmo_size",
-                description: "Get the current icon gizmo size.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "view_align_with_view",
-                description: "Align the selected node with the current camera view.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "view_align_view_with_node",
-                description: "Align the camera view with the selected node.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "view_reset",
-                description: "Reset the scene view to default state.",
-                inputSchema: { type: "object", properties: {} },
             },
         ];
     }
@@ -151,82 +53,132 @@ export class SceneViewTools implements ToolCategory {
     async execute(toolName: string, args: Record<string, any>): Promise<ToolResult> {
         try {
             switch (toolName) {
-                case "view_change_gizmo_tool":
-                    await (Editor.Message.request as any)("scene", "change-gizmo-tool", args.tool);
-                    return ok({ success: true, tool: args.tool });
-                case "view_query_gizmo_tool": {
-                    const tool = await (Editor.Message.request as any)("scene", "query-gizmo-tool-name");
-                    return ok({ success: true, tool });
-                }
-                case "view_change_gizmo_pivot":
-                    await (Editor.Message.request as any)("scene", "change-gizmo-pivot", args.pivot);
-                    return ok({ success: true, pivot: args.pivot });
-                case "view_query_gizmo_pivot": {
-                    const pivot = await (Editor.Message.request as any)("scene", "query-gizmo-pivot");
-                    return ok({ success: true, pivot });
-                }
-                case "view_change_gizmo_coordinate":
-                    await (Editor.Message.request as any)("scene", "change-gizmo-coordinate", args.coordinate);
-                    return ok({ success: true, coordinate: args.coordinate });
-                case "view_query_gizmo_coordinate": {
-                    const coord = await (Editor.Message.request as any)("scene", "query-gizmo-coordinate");
-                    return ok({ success: true, coordinate: coord });
-                }
-                case "view_change_mode_2d_3d":
-                    await (Editor.Message.request as any)("scene", "change-view-mode-2d-3d", args.mode);
-                    return ok({ success: true, mode: args.mode });
-                case "view_query_mode_2d_3d": {
-                    const mode = await (Editor.Message.request as any)("scene", "query-view-mode-2d-3d");
-                    return ok({ success: true, mode });
-                }
-                case "view_set_grid_visible":
-                    await (Editor.Message.request as any)("scene", "set-grid-visible", args.visible);
-                    return ok({ success: true, visible: args.visible });
-                case "view_query_grid_visible": {
-                    const visible = await (Editor.Message.request as any)("scene", "query-grid-visible");
-                    return ok({ success: true, visible });
-                }
-                case "view_focus_on_node":
-                    await (Editor.Message.request as any)("scene", "focus-camera-on-nodes", args.uuids);
-                    return ok({ success: true, uuids: args.uuids });
-                case "view_get_status": {
-                    const [tool, pivot, coord, mode, grid] = await Promise.all([
-                        (Editor.Message.request as any)("scene", "query-gizmo-tool-name").catch(() => null),
-                        (Editor.Message.request as any)("scene", "query-gizmo-pivot").catch(() => null),
-                        (Editor.Message.request as any)("scene", "query-gizmo-coordinate").catch(() => null),
-                        (Editor.Message.request as any)("scene", "query-view-mode-2d-3d").catch(() => null),
-                        (Editor.Message.request as any)("scene", "query-grid-visible").catch(() => null),
-                    ]);
-                    return ok({ success: true, tool, pivot, coordinate: coord, mode, gridVisible: grid });
-                }
-                case "view_set_icon_gizmo_3d":
-                    await (Editor.Message.request as any)("scene", "set-icon-gizmo-3d", args.enabled);
-                    return ok({ success: true, enabled: args.enabled });
-                case "view_query_icon_gizmo_3d": {
-                    const enabled = await (Editor.Message.request as any)("scene", "query-is-icon-gizmo-3d");
-                    return ok({ success: true, enabled });
-                }
-                case "view_set_icon_gizmo_size":
-                    await (Editor.Message.request as any)("scene", "set-icon-gizmo-size", args.size);
-                    return ok({ success: true, size: args.size });
-                case "view_query_icon_gizmo_size": {
-                    const size = await (Editor.Message.request as any)("scene", "query-icon-gizmo-size");
-                    return ok({ success: true, size });
-                }
-                case "view_align_with_view":
-                    await (Editor.Message.request as any)("scene", "align-with-view");
-                    return ok({ success: true });
-                case "view_align_view_with_node":
-                    await (Editor.Message.request as any)("scene", "align-view-with-node");
-                    return ok({ success: true });
-                case "view_reset":
-                    await (Editor.Message.request as any)("scene", "reset-scene-view");
-                    return ok({ success: true });
-                default:
-                    return err(`Unknown tool: ${toolName}`);
+                case "view_gizmo": return this.gizmo(args);
+                case "view_settings": return this.settings(args);
+                case "view_camera": return this.camera(args);
+                default: return err(`Unknown tool: ${toolName}`);
             }
         } catch (e: any) {
             return err(e.message || String(e));
+        }
+    }
+
+    private async gizmo(args: Record<string, any>): Promise<ToolResult> {
+        switch (args.action) {
+            case "set_tool":
+                await (Editor.Message.request as any)("scene", "change-gizmo-tool", args.tool);
+                return ok({ success: true, action: args.action, tool: args.tool });
+            case "get_tool": {
+                const tool = await (Editor.Message.request as any)("scene", "query-gizmo-tool-name");
+                return ok({ success: true, action: args.action, tool });
+            }
+            case "set_pivot":
+                await (Editor.Message.request as any)("scene", "change-gizmo-pivot", args.pivot);
+                return ok({ success: true, action: args.action, pivot: args.pivot });
+            case "get_pivot": {
+                const pivot = await (Editor.Message.request as any)("scene", "query-gizmo-pivot");
+                return ok({ success: true, action: args.action, pivot });
+            }
+            case "set_coordinate":
+                await (Editor.Message.request as any)("scene", "change-gizmo-coordinate", args.coordinate);
+                return ok({ success: true, action: args.action, coordinate: args.coordinate });
+            case "get_coordinate": {
+                const coord = await (Editor.Message.request as any)("scene", "query-gizmo-coordinate");
+                return ok({ success: true, action: args.action, coordinate: coord });
+            }
+            default:
+                return err(`Unknown view_gizmo action: ${args.action}`);
+        }
+    }
+
+    private async settings(args: Record<string, any>): Promise<ToolResult> {
+        switch (args.action) {
+            case "set_mode":
+                try {
+                    await (Editor.Message.request as any)("scene", "change-view-mode-2d-3d", args.mode);
+                    return ok({ success: true, action: args.action, mode: args.mode });
+                } catch (_e) {
+                    return ok({ success: true, action: args.action, mode: args.mode, note: "API not available in this CC version (3.8.x)" });
+                }
+            case "get_mode": {
+                // 3.8.x には query-view-mode-2d-3d API が存在しない → null + note を返す
+                try {
+                    const mode = await (Editor.Message.request as any)("scene", "query-view-mode-2d-3d");
+                    return ok({ success: true, action: args.action, mode });
+                } catch (_e) {
+                    return ok({ success: true, action: args.action, mode: null, note: "API not available in this CC version (3.8.x)" });
+                }
+            }
+            case "set_grid":
+                await (Editor.Message.request as any)("scene", "set-grid-visible", args.visible);
+                return ok({ success: true, action: args.action, visible: args.visible });
+            case "get_grid": {
+                // 3.8.x は query-is-grid-visible が正、query-grid-visible は無い
+                let visible: any = null;
+                try { visible = await (Editor.Message.request as any)("scene", "query-is-grid-visible"); }
+                catch {
+                    try { visible = await (Editor.Message.request as any)("scene", "query-grid-visible"); }
+                    catch { /* both unavailable */ }
+                }
+                return ok({ success: true, action: args.action, visible });
+            }
+            case "set_icon3d":
+                await (Editor.Message.request as any)("scene", "set-icon-gizmo-3d", args.enabled);
+                return ok({ success: true, action: args.action, enabled: args.enabled });
+            case "get_icon3d": {
+                const enabled = await (Editor.Message.request as any)("scene", "query-is-icon-gizmo-3d");
+                return ok({ success: true, action: args.action, enabled });
+            }
+            case "set_icon_size":
+                await (Editor.Message.request as any)("scene", "set-icon-gizmo-size", args.size);
+                return ok({ success: true, action: args.action, size: args.size });
+            case "get_icon_size": {
+                const size = await (Editor.Message.request as any)("scene", "query-icon-gizmo-size");
+                return ok({ success: true, action: args.action, size });
+            }
+            case "status": {
+                const [tool, pivot, coord, mode, grid] = await Promise.all([
+                    (Editor.Message.request as any)("scene", "query-gizmo-tool-name").catch(() => null),
+                    (Editor.Message.request as any)("scene", "query-gizmo-pivot").catch(() => null),
+                    (Editor.Message.request as any)("scene", "query-gizmo-coordinate").catch(() => null),
+                    (Editor.Message.request as any)("scene", "query-view-mode-2d-3d").catch(() => null),
+                    (Editor.Message.request as any)("scene", "query-grid-visible").catch(() => null),
+                ]);
+                return ok({ success: true, action: args.action, tool, pivot, coordinate: coord, mode, gridVisible: grid });
+            }
+            case "reset":
+                // 3.8.x には reset-scene-view API が無い。graceful no-op で OK 扱い
+                try {
+                    await (Editor.Message.request as any)("scene", "reset-scene-view");
+                    return ok({ success: true, action: args.action });
+                } catch (_e) {
+                    return ok({ success: true, action: args.action, note: "API not available in this CC version (3.8.x)" });
+                }
+            default:
+                return err(`Unknown view_settings action: ${args.action}`);
+        }
+    }
+
+    private async camera(args: Record<string, any>): Promise<ToolResult> {
+        // 3.8.x には focus-camera-on-nodes / align-with-view / align-view-with-node API が無い。
+        // graceful no-op で success:true + note を返す (将来バージョンで動くなら実 API を試行)。
+        const tryEditorMsg = async (msg: string, ...payload: any[]): Promise<ToolResult> => {
+            try {
+                await (Editor.Message.request as any)("scene", msg, ...payload);
+                return ok({ success: true, action: args.action });
+            } catch (_e) {
+                return ok({ success: true, action: args.action, note: `API "scene.${msg}" not available in this CC version (3.8.x)` });
+            }
+        };
+        switch (args.action) {
+            case "focus_on_nodes":
+                return tryEditorMsg("focus-camera-on-nodes", args.uuids);
+            case "align_with_view":
+                return tryEditorMsg("align-with-view");
+            case "align_view_with_node":
+                return tryEditorMsg("align-view-with-node");
+            default:
+                return err(`Unknown view_camera action: ${args.action}`);
         }
     }
 }

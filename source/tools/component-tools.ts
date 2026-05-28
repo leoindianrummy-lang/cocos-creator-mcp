@@ -645,9 +645,22 @@ export class ComponentTools implements ToolCategory {
                         if (isAssetRef) {
                             return { type: propType, value: { uuid: value } };
                         }
+                        // v2.0.0: Enum 名 → 数値変換 (Layout.type="HORIZONTAL" 等)
+                        if (propType === "Enum" && Array.isArray(propDump.enumList)) {
+                            const item = propDump.enumList.find((e: any) => e?.name === value);
+                            if (item && typeof item.value === "number") {
+                                return { value: item.value, type: "Enum" };
+                            }
+                            // 名前で見つからない場合は数値として解釈を試みる (後方互換)
+                            const asNum = Number(value);
+                            if (!Number.isNaN(asNum)) return { value: asNum, type: "Enum" };
+                            throw new Error(`Enum value "${value}" not found in enumList: ${propDump.enumList.map((e: any) => e?.name).join(", ")}`);
+                        }
                     }
                 }
-            } catch (_e) {
+            } catch (e: any) {
+                // Enum で名前不一致は明示的に throw する (上で throw した場合)
+                if (e?.message?.startsWith("Enum value ")) throw e;
                 // query-node失敗時はフォールバック
             }
             return { value, type: "String" };

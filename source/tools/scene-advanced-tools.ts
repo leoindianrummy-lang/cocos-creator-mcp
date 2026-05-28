@@ -75,35 +75,17 @@ export class SceneAdvancedTools implements ToolCategory {
                 },
             },
             {
-                name: "scene_query_dirty",
-                description: "Check if the current scene has unsaved changes.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "scene_query_classes",
-                description: "Query all available component classes in the scene.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "scene_query_components",
-                description: "Query available components for a given node.",
+                name: "scene_query",
+                description: "Query scene state. Actions: 'dirty' (has unsaved changes?), 'ready' (scene fully loaded?), 'classes' (all component classes), 'components' (available components for a node — uuid required), 'component_has_script' (does a component class have a script file — name required), 'nodes_by_asset' (nodes referencing an asset — assetUuid required), 'scene_bounds' (current scene bounding rect). For full node/component dumps use cocos://node/{uuid} / cocos://component/{uuid} resources.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        uuid: { type: "string", description: "Node UUID" },
+                        action: { type: "string", description: "'dirty' | 'ready' | 'classes' | 'components' | 'component_has_script' | 'nodes_by_asset' | 'scene_bounds'" },
+                        uuid: { type: "string", description: "Node UUID (action=components)" },
+                        name: { type: "string", description: "Component class name (action=component_has_script)" },
+                        assetUuid: { type: "string", description: "Asset UUID (action=nodes_by_asset)" },
                     },
-                    required: ["uuid"],
-                },
-            },
-            {
-                name: "scene_query_nodes_by_asset",
-                description: "Find all nodes that reference a given asset UUID.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        assetUuid: { type: "string", description: "Asset UUID to search for" },
-                    },
-                    required: ["assetUuid"],
+                    required: ["action"],
                 },
             },
             {
@@ -136,20 +118,6 @@ export class SceneAdvancedTools implements ToolCategory {
                 },
             },
             {
-                name: "scene_query_ready",
-                description: "Check if the scene is fully loaded and ready.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "scene_query_component_has_script",
-                description: "Check if a component has an associated script file.",
-                inputSchema: {
-                    type: "object",
-                    properties: { name: { type: "string", description: "Component class name" } },
-                    required: ["name"],
-                },
-            },
-            {
                 name: "scene_save_as",
                 description: "Save the current scene to a new file (shows save dialog).",
                 inputSchema: { type: "object", properties: {} },
@@ -168,11 +136,6 @@ export class SceneAdvancedTools implements ToolCategory {
                     required: ["uuids", "parent"],
                 },
             },
-            {
-                name: "scene_query_scene_bounds",
-                description: "Get the bounding rect of the current scene.",
-                inputSchema: { type: "object", properties: {} },
-            },
         ];
     }
 
@@ -183,22 +146,8 @@ export class SceneAdvancedTools implements ToolCategory {
                     return ok(await this.sceneScript(args.method, args.args || []));
                 case "scene_snapshot":
                     return ok(await (Editor.Message.request as any)("scene", "snapshot"));
-                case "scene_query_dirty": {
-                    const dirty = await (Editor.Message.request as any)("scene", "query-dirty");
-                    return ok({ success: true, dirty });
-                }
-                case "scene_query_classes": {
-                    const classes = await (Editor.Message.request as any)("scene", "query-classes");
-                    return ok({ success: true, classes });
-                }
-                case "scene_query_components": {
-                    const comps = await (Editor.Message.request as any)("scene", "query-components", args.uuid);
-                    return ok({ success: true, components: comps });
-                }
-                case "scene_query_nodes_by_asset": {
-                    const nodes = await (Editor.Message.request as any)("scene", "query-nodes-by-asset-uuid", args.assetUuid);
-                    return ok({ success: true, nodes });
-                }
+                case "scene_query":
+                    return this.handleQuery(args);
                 case "scene_soft_reload":
                     await (Editor.Message.request as any)("scene", "soft-reload");
                     return ok({ success: true });
@@ -216,14 +165,6 @@ export class SceneAdvancedTools implements ToolCategory {
                     const result = await (Editor.Message.request as any)("scene", "execute-component-method", { uuid: args.uuid, name: args.method, args: args.args || [] });
                     return ok({ success: true, result });
                 }
-                case "scene_query_ready": {
-                    const ready = await (Editor.Message.request as any)("scene", "query-is-ready");
-                    return ok({ success: true, ready });
-                }
-                case "scene_query_component_has_script": {
-                    const hasScript = await (Editor.Message.request as any)("scene", "query-component-has-script", args.name);
-                    return ok({ success: true, name: args.name, hasScript });
-                }
                 case "scene_save_as": {
                     const result = await (Editor.Message.request as any)("scene", "save-as-scene");
                     return ok({ success: true, result });
@@ -235,15 +176,50 @@ export class SceneAdvancedTools implements ToolCategory {
                         keepWorldTransform: args.keepWorldTransform || false,
                     });
                     return ok({ success: true });
-                case "scene_query_scene_bounds": {
-                    const bounds = await (Editor.Message.request as any)("scene", "query-scene-bounds");
-                    return ok({ success: true, bounds });
-                }
                 default:
                     return err(`Unknown tool: ${toolName}`);
             }
         } catch (e: any) {
             return err(e.message || String(e));
+        }
+    }
+
+    /** scene_query (v2.0.0) — 旧 scene_query_dirty/ready/classes/components/component_has_script/nodes_by_asset/scene_bounds を統合 */
+    private async handleQuery(args: Record<string, any>): Promise<ToolResult> {
+        switch (args.action) {
+            case "dirty": {
+                const dirty = await (Editor.Message.request as any)("scene", "query-dirty");
+                return ok({ success: true, action: args.action, dirty });
+            }
+            case "ready": {
+                const ready = await (Editor.Message.request as any)("scene", "query-is-ready");
+                return ok({ success: true, action: args.action, ready });
+            }
+            case "classes": {
+                const classes = await (Editor.Message.request as any)("scene", "query-classes");
+                return ok({ success: true, action: args.action, classes });
+            }
+            case "components": {
+                if (!args.uuid) return err("scene_query(components): 'uuid' is required");
+                const comps = await (Editor.Message.request as any)("scene", "query-components", args.uuid);
+                return ok({ success: true, action: args.action, components: comps });
+            }
+            case "component_has_script": {
+                if (!args.name) return err("scene_query(component_has_script): 'name' is required");
+                const hasScript = await (Editor.Message.request as any)("scene", "query-component-has-script", args.name);
+                return ok({ success: true, action: args.action, name: args.name, hasScript });
+            }
+            case "nodes_by_asset": {
+                if (!args.assetUuid) return err("scene_query(nodes_by_asset): 'assetUuid' is required");
+                const nodes = await (Editor.Message.request as any)("scene", "query-nodes-by-asset-uuid", args.assetUuid);
+                return ok({ success: true, action: args.action, nodes });
+            }
+            case "scene_bounds": {
+                const bounds = await (Editor.Message.request as any)("scene", "query-scene-bounds");
+                return ok({ success: true, action: args.action, bounds });
+            }
+            default:
+                return err(`Unknown scene_query action: ${args.action}. Expected dirty / ready / classes / components / component_has_script / nodes_by_asset / scene_bounds.`);
         }
     }
 

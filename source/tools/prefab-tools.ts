@@ -31,14 +31,17 @@ export class PrefabTools implements ToolCategory {
         return [
             {
                 name: "prefab_create",
-                description: "Create a prefab from an existing node in the scene. The node remains in the scene.",
+                description: "Create a prefab. Modes: 'simple' (default — extract a node into a prefab, original node stays in scene; needs uuid + path), 'replace' (extract + replace original node with a prefab instance, recommended for nested prefabs; needs uuid + path), 'from_spec' (build node tree + auto-bind + create in one call from a JSON spec; needs path + spec [+ autoBindMode]).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        uuid: { type: "string", description: "Node UUID to create prefab from" },
-                        path: { type: "string", description: "db:// path for the prefab (e.g. 'db://assets/prefabs/MyPrefab.prefab')" },
+                        mode: { type: "string", description: "'simple' (default) | 'replace' | 'from_spec'" },
+                        uuid: { type: "string", description: "Node UUID (mode=simple|replace)" },
+                        path: { type: "string", description: "db:// path for the new prefab" },
+                        spec: { description: "Node tree spec (mode=from_spec) — see node_create_tree format + optional autoBind field" },
+                        autoBindMode: { type: "string", enum: ["fuzzy", "strict"], description: "Auto-bind matching mode (mode=from_spec, default fuzzy)" },
                     },
-                    required: ["uuid", "path"],
+                    required: ["path"],
                 },
             },
             {
@@ -99,18 +102,6 @@ export class PrefabTools implements ToolCategory {
                 },
             },
             {
-                name: "prefab_create_and_replace",
-                description: "Create a prefab from a node AND replace the original node with a prefab instance. This is the recommended way to extract a nested prefab — one command instead of create → delete → instantiate.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node UUID to create prefab from" },
-                        path: { type: "string", description: "db:// path for the prefab (e.g. 'db://assets/prefabs/MyPrefab.prefab')" },
-                    },
-                    required: ["uuid", "path"],
-                },
-            },
-            {
                 name: "prefab_edit",
                 description: "Enter / exit prefab editing mode. Actions: 'open' (uuid or path [+ force]) — equivalent to double-clicking the prefab; 'close' ([+ save] [+ sceneUuid] [+ force]) — save & exit edit mode and return to a scene. dirty-untitled preflight applies as with scene_manage.",
                 inputSchema: {
@@ -126,26 +117,27 @@ export class PrefabTools implements ToolCategory {
                     required: ["action"],
                 },
             },
-            {
-                name: "prefab_create_from_spec",
-                description: "Create a prefab from a JSON spec in one call. Combines node_create_tree + component_auto_bind + prefab_create into a single operation. Spec extends node_create_tree format with optional autoBind field. Example: { name: 'MyPopup', components: ['cc.UITransform', 'MyPopupView'], autoBind: 'MyPopupView', children: [{ name: 'CloseButton', components: ['cc.Button'] }] }",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        path: { type: "string", description: "db:// path for the prefab (e.g. 'db://assets/prefabs/MyPrefab.prefab')" },
-                        spec: { description: "Node tree specification with optional autoBind field (string for component type to auto-bind)" },
-                        autoBindMode: { type: "string", enum: ["fuzzy", "strict"], description: "Auto-bind matching mode (default: fuzzy)" },
-                    },
-                    required: ["path", "spec"],
-                },
-            },
         ];
     }
 
     async execute(toolName: string, args: Record<string, any>): Promise<ToolResult> {
         switch (toolName) {
-            case "prefab_create":
-                return this.createPrefab(args.uuid, args.path);
+            case "prefab_create": {
+                const mode = args.mode || "simple";
+                if (mode === "simple") {
+                    if (!args.uuid) return err("prefab_create(simple): 'uuid' is required");
+                    return this.createPrefab(args.uuid, args.path);
+                }
+                if (mode === "replace") {
+                    if (!args.uuid) return err("prefab_create(replace): 'uuid' is required");
+                    return this.createAndReplace(args.uuid, args.path);
+                }
+                if (mode === "from_spec") {
+                    if (!args.spec) return err("prefab_create(from_spec): 'spec' is required");
+                    return this.createFromSpec(args.path, parseMaybeJson(args.spec), args.autoBindMode ?? "fuzzy");
+                }
+                return err(`Unknown prefab_create mode: ${mode}. Expected simple / replace / from_spec.`);
+            }
             case "prefab_instantiate":
                 return this.instantiatePrefab(args.prefabUuid, args.parent);
             case "prefab_update":
@@ -165,14 +157,10 @@ export class PrefabTools implements ToolCategory {
             }
             case "prefab_revert":
                 return this.revertPrefab(args.uuid);
-            case "prefab_create_and_replace":
-                return this.createAndReplace(args.uuid, args.path);
             case "prefab_edit":
                 if (args.action === "open") return this.openPrefab(args.uuid, args.path, !!args.force);
                 if (args.action === "close") return this.closePrefab(args.save !== false, args.sceneUuid, !!args.force);
                 return err(`Unknown prefab_edit action: ${args.action}. Expected 'open' or 'close'.`);
-            case "prefab_create_from_spec":
-                return this.createFromSpec(args.path, parseMaybeJson(args.spec), args.autoBindMode ?? "fuzzy");
             default:
                 return err(`Unknown tool: ${toolName}`);
         }

@@ -117,12 +117,15 @@ export class DebugTools implements ToolCategory {
             },
             {
                 name: "debug_screenshot",
-                description: "Take a screenshot of the editor window and save to a file. Returns the file path of the saved PNG.",
+                description: "Capture screenshots. Targets: 'window' (default — editor window, returns saved PNG path) or 'pages' (navigate game preview to each page name in `pages` and screenshot each — requires GameDebugClient + active preview).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        savePath: { type: "string", description: "File path to save the PNG (default: temp/screenshots/screenshot_<timestamp>.png)" },
-                        maxWidth: { type: "number", description: "Max width in pixels for resize (default: 960, 0 = no resize). Aspect ratio is preserved." },
+                        target: { type: "string", description: "'window' (default) | 'pages'" },
+                        savePath: { type: "string", description: "File path (target=window, default temp/screenshots/screenshot_<timestamp>.png)" },
+                        maxWidth: { type: "number", description: "Max width in pixels for resize (default 960, 0 = no resize)" },
+                        pages: { type: "array", items: { type: "string" }, description: "Page names to screenshot (target=pages, e.g. ['HomePageView','ShopPageView'])" },
+                        delay: { type: "number", description: "Delay ms between navigate and screenshot (target=pages, default 1000)" },
                     },
                 },
             },
@@ -159,23 +162,6 @@ export class DebugTools implements ToolCategory {
                         timeout: { type: "number", description: "Max wait time in ms for file upload (action=stop, default 30000)" },
                     },
                     required: ["action"],
-                },
-            },
-            {
-                name: "debug_batch_screenshot",
-                description: "Navigate to multiple pages and take a screenshot of each. Requires game preview running with GameDebugClient. Returns an array of screenshot file paths.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        pages: {
-                            type: "array",
-                            items: { type: "string" },
-                            description: "List of page names to screenshot (e.g. ['HomePageView', 'ShopPageView'])",
-                        },
-                        delay: { type: "number", description: "Delay in ms between navigate and screenshot (default: 1000)" },
-                        maxWidth: { type: "number", description: "Max width for screenshot resize (default: 960)" },
-                    },
-                    required: ["pages"],
                 },
             },
             {
@@ -235,16 +221,21 @@ export class DebugTools implements ToolCategory {
                     return ok({ success: true, url: args.url });
                 case "debug_game_command":
                     return this.gameCommand(args.type || args.command, parseMaybeJson(args.args), args.timeout || 5000, args.maxWidth, args.imageFormat);
-                case "debug_screenshot":
-                    return this.takeScreenshot(args.savePath, args.maxWidth);
+                case "debug_screenshot": {
+                    const target = args.target || "window";
+                    if (target === "window") return this.takeScreenshot(args.savePath, args.maxWidth);
+                    if (target === "pages") {
+                        if (!Array.isArray(args.pages)) return err("debug_screenshot(pages): 'pages' array is required");
+                        return this.batchScreenshot(args.pages, args.delay || 1000, args.maxWidth);
+                    }
+                    return err(`Unknown debug_screenshot target: ${target}. Expected 'window' or 'pages'.`);
+                }
                 case "debug_preview":
                     return this.handlePreview(args.action || "start", args.waitForReady, args.waitTimeout || 15000);
                 case "debug_clear_code_cache":
                     return this.clearCodeCache();
                 case "debug_validate_scene":
                     return this.validateScene();
-                case "debug_batch_screenshot":
-                    return this.batchScreenshot(args.pages, args.delay || 1000, args.maxWidth);
                 case "debug_record":
                     if (args.action === "start") {
                         return this.gameCommand("record_start", {

@@ -185,96 +185,47 @@ export class SceneTools implements ToolCategory {
     getTools(): ToolDefinition[] {
         return [
             {
-                name: "scene_get_hierarchy",
-                description: "Get the node hierarchy of the current scene. Returns tree structure with uuid, name, active, and optionally components.",
+                name: "scene_manage",
+                description: "Scene lifecycle operations. Actions: 'open' (scene UUID or db:// path [+ force]), 'save' (save current), 'close' ([+ force]), 'list' (all scenes in project), 'current' (current scene name+uuid), 'hierarchy' (current scene node tree [+ includeComponents]). Read-only actions (list/current/hierarchy) also available via cocos://scene/* resource URIs. For 'open' / 'close', if the current scene is dirty and untitled, returns an error instead of triggering a modal save dialog; pass force=true to bypass.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        includeComponents: {
-                            type: "boolean",
-                            description: "Include component info for each node",
-                        },
+                        action: { type: "string", description: "'open' | 'save' | 'close' | 'list' | 'current' | 'hierarchy'" },
+                        scene: { type: "string", description: "Scene UUID or db:// path (action=open)" },
+                        force: { type: "boolean", description: "Skip dirty-scene preflight (action=open|close, default false)" },
+                        includeComponents: { type: "boolean", description: "Include component info in hierarchy (action=hierarchy)" },
                     },
+                    required: ["action"],
                 },
-            },
-            {
-                name: "scene_open",
-                description: "Open a scene by its asset UUID or database path (e.g. 'db://assets/scenes/Main.scene'). If the current scene is dirty and untitled, returns an error instead of triggering a modal save dialog that would block MCP. Pass force=true to bypass this guard.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        scene: {
-                            type: "string",
-                            description: "Scene UUID or db:// path",
-                        },
-                        force: {
-                            type: "boolean",
-                            description: "Skip dirty-scene preflight check (may trigger modal save dialog)",
-                        },
-                    },
-                    required: ["scene"],
-                },
-            },
-            {
-                name: "scene_save",
-                description: "Save the currently open scene.",
-                inputSchema: {
-                    type: "object",
-                    properties: {},
-                },
-            },
-            {
-                name: "scene_get_list",
-                description: "List all scene files in the project.",
-                inputSchema: {
-                    type: "object",
-                    properties: {},
-                },
-            },
-            {
-                name: "scene_close",
-                description: "Close the current scene. If the current scene is dirty and untitled, returns an error instead of triggering a modal save dialog. Pass force=true to bypass.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        force: {
-                            type: "boolean",
-                            description: "Skip dirty-scene preflight check (may trigger modal save dialog)",
-                        },
-                    },
-                },
-            },
-            {
-                name: "scene_get_current",
-                description: "Get the name and UUID of the currently open scene.",
-                inputSchema: { type: "object", properties: {} },
             },
         ];
     }
 
     async execute(toolName: string, args: Record<string, any>): Promise<ToolResult> {
-        switch (toolName) {
-            case "scene_get_hierarchy":
+        if (toolName !== "scene_manage") return err(`Unknown tool: ${toolName}`);
+        switch (args.action) {
+            case "hierarchy":
                 return this.getHierarchy(args.includeComponents ?? false);
-            case "scene_open":
+            case "open":
+                if (!args.scene) return err("scene_manage(open): 'scene' is required");
                 return this.openScene(args.scene, !!args.force);
-            case "scene_save":
+            case "save":
                 return this.saveScene();
-            case "scene_get_list":
+            case "list":
                 return this.getSceneList();
-            case "scene_close":
+            case "close":
                 try {
                     await ensureSceneSafeToSwitch(!!args.force);
                     await (Editor.Message.request as any)("scene", "close-scene");
-                    return ok({ success: true });
+                    return ok({ success: true, action: args.action });
                 } catch (e: any) { return err(e.message || String(e)); }
-            case "scene_get_current":
+            case "current":
                 return this.getHierarchy(false).then((r) => {
                     const parsed = JSON.parse(r.content[0].text);
-                    return ok({ success: true, sceneName: parsed.sceneName, sceneUuid: parsed.sceneUuid });
+                    return ok({ success: true, action: args.action, sceneName: parsed.sceneName, sceneUuid: parsed.sceneUuid });
                 }).catch((e) => err(String(e)));
             default:
-                return err(`Unknown tool: ${toolName}`);
+                return err(`Unknown scene_manage action: ${args.action}. Expected open / save / close / list / current / hierarchy.`);
         }
     }
 

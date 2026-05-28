@@ -79,7 +79,7 @@ const ALL_TOOLS = [
     "component_manage", "component_auto_bind", "component_set_property",
     // debug: 集約済 + 残り個別 (v2: get_editor_info は cocos://editor/info に移行)
     "debug_logs", "debug_extension", "debug_record",
-    "debug_clear_console", "debug_execute_script", "debug_get_console_logs",
+    "debug_execute_script",
     "read_console", "execute_editor_script",
     "debug_list_messages",
     "debug_open_url", "debug_query_devices", "debug_validate_scene",
@@ -382,15 +382,16 @@ async function testDebugTools() {
     const msgs = await callTool("debug_list_messages", { target: "scene" });
     assert(msgs.success === true, "list_messages");
 
-    const logs = await callTool("debug_get_console_logs", { count: 10 });
-    assert(logs.success === true, "get_console_logs");
+    // v2: debug_get_console_logs は read_console に統合された
+    const logs = await callTool("read_console", { count: 10 });
+    assert(logs.success === true, "read_console (get logs)");
 
-    // source filter — verify parameter is accepted (filtering requires CC restart to apply)
-    const sceneLogs = await callTool("debug_get_console_logs", { count: 10, source: "scene" });
-    assert(sceneLogs.success === true, "get_console_logs source=scene accepted");
+    // sources filter
+    const sceneLogs = await callTool("read_console", { count: 10, sources: ["scene"] });
+    assert(sceneLogs.success === true, "read_console sources=['scene']");
 
-    const gameLogs = await callTool("debug_get_console_logs", { count: 10, source: "game" });
-    assert(gameLogs.success === true, "get_console_logs source=game accepted");
+    const gameLogs = await callTool("read_console", { count: 10, sources: ["game"] });
+    assert(gameLogs.success === true, "read_console sources=['game']");
 
     const exts = await callTool("debug_extension", { action: "list" });
     assert(exts.success === true, "list_extensions");
@@ -1507,8 +1508,9 @@ async function testUncoveredTools() {
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
 
     // debug tools (editor-only, no preview required)
-    const clearRes = await callTool("debug_clear_console");
-    assert(clearRes.success === true || !clearRes._rpcError, "debug_clear_console");
+    // v2: debug_clear_console は read_console(action="clear") に統合された
+    const clearRes = await callTool("read_console", { action: "clear" });
+    assert(clearRes.success === true || !clearRes._rpcError, "read_console(action=clear)");
 
     const extInfo = await callTool("debug_extension", { action: "info", name: "cocos-creator-mcp" });
     assert(extInfo.success === true || !extInfo._rpcError, "debug_get_extension_info");

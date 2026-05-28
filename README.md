@@ -106,26 +106,24 @@ clients can still complete a pro-forma flow on localhost.
 
 ```bash
 curl http://127.0.0.1:3000/health
-# {"status":"ok","tools":73}
+# {"status":"ok","tools":64}
 ```
 
-## Available Tools (~73)
+## Available Tools (~64)
 
-v2.0.0 集約後の構成。各カテゴリは `category_action` パターンで action を切り替える単一ツールに統合されています (旧 v1 の 166 ツールから 56% 削減)。
+v2.0.0 集約後の構成。各カテゴリは `category_action` パターンで action を切り替える単一ツールに統合されています (旧 v1 の 166 ツールから 61% 削減)。
 
 <details>
-<summary><strong>Scene (18)</strong></summary>
+<summary><strong>Scene (12)</strong></summary>
 
 - `scene_manage(open/save/close/list/current/hierarchy)`
 - `scene_clipboard(copy/paste/cut)`
 - `scene_undo(snapshot/snapshot_abort/begin/end/cancel)`
 - `scene_array(move/remove)`
 - `scene_reset(transform/property/component/restore_prefab)`
+- `scene_query(dirty/ready/classes/components/component_has_script/nodes_by_asset/scene_bounds)`
 - `scene_create`, `scene_save_as`, `scene_set_parent`, `scene_soft_reload`
 - `scene_execute_script`, `scene_execute_component_method`
-- `scene_query_dirty`, `scene_query_ready`, `scene_query_classes`
-- `scene_query_components`, `scene_query_component_has_script`
-- `scene_query_nodes_by_asset`, `scene_query_scene_bounds`
 </details>
 
 <details>
@@ -156,10 +154,10 @@ Note: 3.8.x で未対応の Editor API は graceful no-op で動作 (`note` を�
 </details>
 
 <details>
-<summary><strong>Prefab (10)</strong></summary>
+<summary><strong>Prefab (7)</strong></summary>
 
 - `prefab_edit(open/close)`
-- `prefab_create`, `prefab_create_and_replace`, `prefab_create_from_spec`
+- `prefab_create(mode: simple/replace/from_spec)` — extract / extract-and-replace / build-from-spec all unified
 - `prefab_instantiate`, `prefab_update`, `prefab_revert`, `prefab_duplicate`, `prefab_validate`
 </details>
 
@@ -180,11 +178,11 @@ For project name / path / engine info, use the `cocos://project/*` resources.
 </details>
 
 <details>
-<summary><strong>Debug (16)</strong></summary>
+<summary><strong>Debug (15)</strong></summary>
 
 **Console / scripts:** `read_console`, `execute_editor_script`, `debug_execute_script`, `debug_list_messages`.
 **Logs / extension / record:** `debug_logs(get/search/info)`, `debug_extension(list/info/reload)`, `debug_record(start/stop)`.
-**Editor / preview:** `debug_validate_scene`, `debug_clear_code_cache`, `debug_wait_compile`, `debug_query_devices`, `debug_open_url`, `debug_preview`, `debug_screenshot`, `debug_batch_screenshot`, `debug_game_command`.
+**Editor / preview:** `debug_validate_scene`, `debug_clear_code_cache`, `debug_wait_compile`, `debug_query_devices`, `debug_open_url`, `debug_preview`, `debug_screenshot(target: window/pages)`, `debug_game_command`.
 </details>
 
 <details>
@@ -366,7 +364,7 @@ node test/regression.mjs 3001    # custom port
 - **v1.12.0** — Prefab authoring efficiency: `component_auto_bind` (auto-match `@property` fields to node names), `debug_wait_compile` (wait for TS compile to finish), `prefab_create_from_spec` (create node tree + auto-bind + prefab_create in one call)
 - **v1.13.0** — `nodeName` parameter on component/get_components/auto_bind (no UUID required), `screenshot` auto-return option on `component_set_property` / `node_set_layout`, `node_set_layout` unified tool (UITransform + Widget + color/opacity in one call), dialog auto-response for untitled+dirty scenes, shared screenshot / node-resolve utilities
 - **v1.14.0** — Widget `_alignFlags` auto-recalc bug fix: `setProperty` / `setProperties` / `node_set_layout` now re-query `isAlign*` values from scene and rebuild `_alignFlags` bitmask after isAlign updates (Editor bug where bitmask was not updated automatically, causing prefabs to save with `_alignFlags: 45` stuck state). Also `node_create` component addition now waits for editor reflection (`waitForComponent`) to fix flaky tests
-- **v2.0.0** (BREAKING) — Major tool topology refactor: 166 → ~73 tools (-56%).
+- **v2.0.0** (BREAKING) — Major tool topology refactor: 166 → ~64 tools (-61%).
   - New: `read_console` (Editor + Scene + Game console with type/source filters, compile error detection via project.log fallback), `execute_editor_script` (escape hatch for arbitrary editor JS), 12 MCP Resources (`cocos://scene/*`, `cocos://node/{uuid}`, `cocos://component/{uuid}`, `cocos://prefab/*`, `cocos://project/*`, `cocos://editor/info`, `cocos://asset/{uuid}`).
   - Enhanced `component_set_property`: transparent value references — `db://...` asset paths, `{path}` / `{guid}` objects, enum names, `cc.Vec3/Vec2/Vec4/Color/Size` plain objects all auto-resolved.
   - Aggregated tools into `category_action` patterns: `scene_manage`, `scene_clipboard`, `scene_undo`, `scene_array`, `scene_reset`, `scene_view_*`, `node_manage`, `component_manage`, `prefab_edit`, `asset_manage`, `asset_query`, `view_gizmo/settings/camera`, `refimage_manage/set/query`, `preferences_manage`, `builder_manage`, `server_status`, `debug_logs/extension/record`.

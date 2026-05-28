@@ -38,6 +38,13 @@ v2.0.0 is a **major release** with breaking changes. This document maps every v1
 | `scene_query_node_tree` | **Resource:** `cocos://scene/hierarchy` |
 | `scene_query_node` | **Resource:** `cocos://node/{uuid}` |
 | `scene_query_component` | **Resource:** `cocos://component/{uuid}` |
+| `scene_query_dirty` | `scene_query(action: "dirty")` |
+| `scene_query_ready` | `scene_query(action: "ready")` |
+| `scene_query_classes` | `scene_query(action: "classes")` |
+| `scene_query_components` | `scene_query(action: "components", uuid)` |
+| `scene_query_component_has_script` | `scene_query(action: "component_has_script", name)` |
+| `scene_query_nodes_by_asset` | `scene_query(action: "nodes_by_asset", assetUuid)` |
+| `scene_query_scene_bounds` | `scene_query(action: "scene_bounds")` |
 
 ### View
 
@@ -94,7 +101,10 @@ v2.0.0 is a **major release** with breaking changes. This document maps every v1
 | `prefab_close` | `prefab_edit(action: "close")` |
 | `prefab_list` | **Resource:** `cocos://prefab/list` |
 | `prefab_get_info` | **Resource:** `cocos://prefab/{uuid}` |
-| `prefab_create`, `prefab_create_and_replace`, `prefab_create_from_spec`, `prefab_instantiate`, `prefab_update`, `prefab_revert`, `prefab_duplicate`, `prefab_validate` | unchanged |
+| `prefab_create` (v1: extract a node) | `prefab_create(mode: "simple", uuid, path)` — mode default also `simple` so existing calls still work parameter-wise |
+| `prefab_create_and_replace` | `prefab_create(mode: "replace", uuid, path)` |
+| `prefab_create_from_spec` | `prefab_create(mode: "from_spec", path, spec [, autoBindMode])` |
+| `prefab_instantiate`, `prefab_update`, `prefab_revert`, `prefab_duplicate`, `prefab_validate` | unchanged |
 
 ### Asset
 
@@ -126,7 +136,9 @@ v2.0.0 is a **major release** with breaking changes. This document maps every v1
 | `debug_reload_extension` | `debug_extension(action: "reload")` |
 | `debug_record_start` | `debug_record(action: "start", ...)` |
 | `debug_record_stop` | `debug_record(action: "stop", timeout?)` |
-| `debug_validate_scene`, `debug_clear_code_cache`, `debug_wait_compile`, `debug_query_devices`, `debug_open_url`, `debug_preview`, `debug_screenshot`, `debug_batch_screenshot`, `debug_game_command`, `debug_execute_script`, `debug_list_messages` | unchanged |
+| `debug_screenshot` (window) | `debug_screenshot(target: "window", ...)` — `target` default `"window"` so existing calls still work |
+| `debug_batch_screenshot` | `debug_screenshot(target: "pages", pages, ...)` |
+| `debug_validate_scene`, `debug_clear_code_cache`, `debug_wait_compile`, `debug_query_devices`, `debug_open_url`, `debug_preview`, `debug_game_command`, `debug_execute_script`, `debug_list_messages` | unchanged |
 
 ### Preferences / Builder / Server
 

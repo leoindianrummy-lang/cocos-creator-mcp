@@ -6,7 +6,7 @@ All notable changes to **cocos-creator-mcp**.
 
 ### Summary
 
-166 → ~73 tools (-56%). Tool topology consolidated into `category_action` patterns. Read-only operations split out into MCP **Resources** (`cocos://`). New escape hatch `execute_editor_script`. Unified `read_console`. Transparent value references in `component_set_property`. Major asset-ref serialization bug fixed in `prefab_create_from_spec`. Full test rewrite (real-invocation + side-effect verification, 357 assertions).
+166 → ~64 tools (-61%). Tool topology consolidated into `category_action` patterns. Read-only operations split out into MCP **Resources** (`cocos://`). New escape hatch `execute_editor_script`. Unified `read_console`. Transparent value references in `component_set_property`. Major asset-ref serialization bug fixed in `prefab_create` (mode=from_spec). Full test rewrite (real-invocation + side-effect verification, ~358 assertions).
 
 ### Added
 
@@ -20,7 +20,7 @@ All notable changes to **cocos-creator-mcp**.
   - `cocos://project/info`, `cocos://project/engine`
   - `cocos://editor/info`
   - `cocos://asset/{uuid}`
-- **Aggregated category_action tools** (`scene_manage`, `scene_clipboard`, `scene_undo`, `scene_array`, `scene_reset`, `node_manage`, `component_manage`, `prefab_edit`, `asset_manage`, `asset_query`, `view_gizmo`, `view_settings`, `view_camera`, `refimage_manage`, `refimage_set`, `refimage_query`, `preferences_manage`, `builder_manage`, `server_status`, `debug_logs`, `debug_extension`, `debug_record`).
+- **Aggregated category_action tools** (`scene_manage`, `scene_clipboard`, `scene_undo`, `scene_array`, `scene_reset`, `scene_query`, `node_manage`, `component_manage`, `prefab_edit`, `prefab_create` (mode), `asset_manage`, `asset_query`, `view_gizmo`, `view_settings`, `view_camera`, `refimage_manage`, `refimage_set`, `refimage_query`, `preferences_manage`, `builder_manage`, `server_status`, `debug_logs`, `debug_extension`, `debug_record`, `debug_screenshot` (target)).
 - **`component_set_property` value reference forms** — `"db://..."` asset paths, `{path}` / `{guid}` objects, enum names (`"HORIZONTAL"`), `cc.Vec3 / Vec2 / Vec4 / Color / Size` plain objects all auto-resolved.
 - **`@path:Canvas/Bg`** node-path resolution in `component_set_property` (existed in v1, now documented).
 - **357 real-invocation regression test assertions** (was 200+ tools/list-registration-only).

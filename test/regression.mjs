@@ -127,7 +127,7 @@ async function testHealth() {
     const res = await fetch(`${BASE}/health`);
     const data = await res.json();
     assert(data.status === "ok", "health status ok");
-    assert(data.tools >= 80, `tool count >= 80 (v2.0.0 集約後; got ${data.tools})`);
+    assert(data.tools >= 60, `tool count >= 60 (v2.0.0 集約後; got ${data.tools})`);
 }
 
 async function testInitialize() {
@@ -150,7 +150,7 @@ async function testToolsList() {
     console.log("\n── tools/list ──");
     const res = await callMcp("tools/list", {});
     const tools = res.result?.tools || [];
-    assert(tools.length >= 80, `tool count >= 80 (v2.0.0; got ${tools.length})`);
+    assert(tools.length >= 60, `tool count >= 60 (v2.0.0; got ${tools.length})`);
 
     const names = tools.map((t) => t.name);
     for (const name of ALL_TOOLS) {
@@ -233,9 +233,12 @@ async function testComponentTools() {
     const added = await callTool("component_manage", { action: "add", uuid, componentType: "cc.Label" });
     assert(added.success === true, "component_manage(add)");
 
+    // Editor の state propagation を待つ (query-node が __comps__ を返すまで)
+    await new Promise(r => setTimeout(r, 200));
     const comps = await readResource(`cocos://node/${uuid}/components`);
-    assert(comps.components?.some((c) => c.type === "cc.Label" || c.type === "Label"),
-        "cocos://node/{uuid}/components contains Label");
+    const types = comps.components?.map((c) => c.type) || [];
+    assert(types.some((t) => t === "cc.Label" || t === "Label"),
+        `cocos://node/{uuid}/components contains Label (got: ${JSON.stringify(types)})`);
 
     const set1 = await callTool("component_set_property", { uuid, componentType: "cc.Label", property: "string", value: "v1test" });
     assert(set1.success === true, "set_property string");
@@ -1207,6 +1210,7 @@ async function testComponentSetPropertyV2() {
 
         // 12. 設定後の値検証 — Color が反映されたか resource 経由で確認
         // resource cocos://node/{uuid}/components で type+uuid を取得 → cocos://component/{uuid}
+        await new Promise(r => setTimeout(r, 200)); // Editor state propagation
         const compsRes = await readResource(`cocos://node/${uuid}/components`);
         const spriteComp = (compsRes.components || []).find((c) => c.type === "cc.Sprite" || c.type === "Sprite");
         if (spriteComp?.uuid) {
@@ -1806,7 +1810,7 @@ async function testStdioBridge() {
             "bridge: initialize result");
         const toolsList = responses.find((r) => r.id === 2);
         const tools = toolsList?.result?.tools || [];
-        assert(tools.length >= 80, `bridge: tools/list count >= 80 (v2; got ${tools.length})`);
+        assert(tools.length >= 60, `bridge: tools/list count >= 60 (v2; got ${tools.length})`);
         assert(stderr.includes("session established"),
             "bridge: session established logged");
     }

@@ -40,7 +40,7 @@ export class DebugTools implements ToolCategory {
             },
             {
                 name: "debug_get_console_logs",
-                description: "Get recent console log entries. Automatically captures scene process logs (console.log/warn/error in scene scripts). Game preview logs can also be captured by sending POST requests to /log endpoint — see README for setup.",
+                description: "[DEPRECATED v2.0.0 — use read_console instead] Get recent console log entries. Automatically captures scene process logs (console.log/warn/error in scene scripts). Game preview logs can also be captured by sending POST requests to /log endpoint — see README for setup.",
                 inputSchema: {
                     type: "object",
                     properties: {
@@ -52,8 +52,32 @@ export class DebugTools implements ToolCategory {
             },
             {
                 name: "debug_clear_console",
-                description: "Clear the editor console.",
+                description: "[DEPRECATED v2.0.0 — use read_console with action='clear'] Clear the editor console.",
                 inputSchema: { type: "object", properties: {} },
+            },
+            {
+                name: "read_console",
+                description: "Read Editor / Scene / Game console logs in one tool. Captures compile errors (from Editor / project.log), runtime errors, and console.log output across all sources. Supports action='get' (default) and action='clear'. Replaces debug_get_console_logs / debug_clear_console in v2.0.0.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        action: { type: "string", description: "'get' (default) or 'clear'." },
+                        types: {
+                            type: "array",
+                            items: { type: "string" },
+                            description: "Filter by entry type. Any of 'log' | 'info' | 'warn' | 'error'. Returns all types if omitted.",
+                        },
+                        sources: {
+                            type: "array",
+                            items: { type: "string" },
+                            description: "Filter by source. Any of 'editor' | 'scene' | 'game'. Default: all three.",
+                        },
+                        count: { type: "number", description: "Max entries to return after merge (default 50)." },
+                        includeStacktrace: { type: "boolean", description: "Include stacktrace strings if available (default false)." },
+                        since: { type: "string", description: "ISO timestamp — return only entries newer than this (optional)." },
+                        search: { type: "string", description: "Substring or regex pattern to filter messages (optional)." },
+                    },
+                },
             },
             {
                 name: "debug_list_extensions",
@@ -232,6 +256,16 @@ export class DebugTools implements ToolCategory {
                     return this.executeScript(args.method, args.args || []);
                 case "debug_get_console_logs":
                     return this.getConsoleLogs(args.count || 50, args.level, args.source);
+                case "read_console":
+                    return this.readConsole({
+                        action: args.action || "get",
+                        types: parseMaybeJson(args.types),
+                        sources: parseMaybeJson(args.sources),
+                        count: args.count || 50,
+                        includeStacktrace: args.includeStacktrace ?? false,
+                        since: args.since,
+                        search: args.search,
+                    });
                 case "debug_clear_console":
                     Editor.Message.send("console", "clear");
                     // Clear scene process log buffer
@@ -379,6 +413,135 @@ export class DebugTools implements ToolCategory {
             logs: merged,
             total: { scene: sceneLogs.length, game: (source === "scene" ? 0 : gameLogs.length) },
         });
+    }
+
+    private async readConsole(opts: {
+        action: string;
+        types?: string[];
+        sources?: string[];
+        count: number;
+        includeStacktrace: boolean;
+        since?: string;
+        search?: string;
+    }): Promise<ToolResult> {
+        const allowedSources = new Set(["editor", "scene", "game"]);
+        const sources = (opts.sources && opts.sources.length > 0)
+            ? opts.sources.filter(s => allowedSources.has(s))
+            : ["editor", "scene", "game"];
+
+        if (opts.action === "clear") {
+            const cleared: string[] = [];
+            if (sources.includes("editor")) {
+                try { Editor.Message.send("console", "clear"); cleared.push("editor"); } catch { /* ignore */ }
+            }
+            if (sources.includes("scene")) {
+                try {
+                    await Editor.Message.request("scene", "execute-scene-script", {
+                        name: "cocos-creator-mcp",
+                        method: "clearConsoleLogs",
+                        args: [],
+                    });
+                    cleared.push("scene");
+                } catch { /* scene not available */ }
+            }
+            if (sources.includes("game")) {
+                clearGameLogs();
+                cleared.push("game");
+            }
+            return ok({ success: true, action: "clear", cleared });
+        }
+
+        if (opts.action !== "get") {
+            return err(`Unknown action: ${opts.action}. Expected 'get' or 'clear'.`);
+        }
+
+        const entries: Array<{ timestamp: string; source: string; type: string; message: string; stacktrace?: string }> = [];
+
+        // scene source
+        if (sources.includes("scene")) {
+            try {
+                const result = await Editor.Message.request("scene", "execute-scene-script", {
+                    name: "cocos-creator-mcp",
+                    method: "getConsoleLogs",
+                    args: [opts.count * 2, undefined], // request more, filter after merge
+                });
+                if (result?.logs) {
+                    for (const l of result.logs) {
+                        entries.push({
+                            timestamp: l.timestamp,
+                            source: "scene",
+                            type: normalizeType(l.level),
+                            message: l.message,
+                            stacktrace: l.stacktrace,
+                        });
+                    }
+                }
+            } catch { /* scene not available */ }
+        }
+
+        // game source
+        if (sources.includes("game")) {
+            const gameResult = getGameLogs(opts.count * 2);
+            for (const l of gameResult.logs) {
+                entries.push({
+                    timestamp: l.timestamp,
+                    source: "game",
+                    type: normalizeType(l.level),
+                    message: l.message,
+                    stacktrace: (l as any).stacktrace,
+                });
+            }
+        }
+
+        // editor source — Step 3 で実装。現状は試行のみ
+        if (sources.includes("editor")) {
+            try {
+                const logs = await (Editor.Message.request as any)("console", "query-last-logs", opts.count * 2);
+                if (Array.isArray(logs)) {
+                    for (const l of logs) {
+                        entries.push({
+                            timestamp: l.timestamp || new Date().toISOString(),
+                            source: "editor",
+                            type: normalizeType(l.type || l.level),
+                            message: l.message || String(l),
+                            stacktrace: l.stack || l.stacktrace,
+                        });
+                    }
+                }
+            } catch { /* Editor console API not supported in this version — Step 3 で project.log fallback を追加 */ }
+        }
+
+        // Apply filters
+        let filtered = entries;
+        if (opts.types && opts.types.length > 0) {
+            const allow = new Set(opts.types.map(normalizeType));
+            filtered = filtered.filter(e => allow.has(e.type));
+        }
+        if (opts.since) {
+            filtered = filtered.filter(e => e.timestamp > opts.since!);
+        }
+        if (opts.search) {
+            let re: RegExp;
+            try { re = new RegExp(opts.search, "i"); }
+            catch { re = new RegExp(escapeRegex(opts.search), "i"); }
+            filtered = filtered.filter(e => re.test(e.message));
+        }
+        if (!opts.includeStacktrace) {
+            filtered = filtered.map(({ stacktrace, ...rest }) => rest);
+        }
+
+        // Sort by timestamp ascending, take last `count`
+        filtered.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+        const result = filtered.slice(-opts.count);
+
+        const counts = {
+            editor: entries.filter(e => e.source === "editor").length,
+            scene: entries.filter(e => e.source === "scene").length,
+            game: entries.filter(e => e.source === "game").length,
+            total: result.length,
+        };
+
+        return ok({ success: true, action: "get", entries: result, counts });
     }
 
     private async listExtensions(): Promise<ToolResult> {
@@ -801,4 +964,18 @@ export class DebugTools implements ToolCategory {
             return err(e.message || String(e));
         }
     }
+}
+
+/** Normalize various level / type spellings to a canonical "log"|"info"|"warn"|"error" string. */
+function normalizeType(raw: any): string {
+    const s = String(raw ?? "").toLowerCase();
+    if (s === "warning") return "warn";
+    if (s === "err") return "error";
+    if (s === "log" || s === "info" || s === "warn" || s === "error") return s;
+    return "log";
+}
+
+/** Escape a string so it can be embedded into a RegExp literally. */
+function escapeRegex(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

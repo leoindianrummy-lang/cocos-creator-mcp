@@ -130,27 +130,19 @@ export class PrefabTools implements ToolCategory {
                 },
             },
             {
-                name: "prefab_open",
-                description: "Open a prefab in editing mode. Equivalent to double-clicking the prefab in CocosCreator. Returns an error if the current scene is dirty and untitled (to avoid modal save dialog); pass force=true to bypass.",
+                name: "prefab_edit",
+                description: "Enter / exit prefab editing mode. Actions: 'open' (uuid or path [+ force]) — equivalent to double-clicking the prefab; 'close' ([+ save] [+ sceneUuid] [+ force]) — save & exit edit mode and return to a scene. dirty-untitled preflight applies as with scene_manage.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        uuid: { type: "string", description: "Prefab asset UUID" },
-                        path: { type: "string", description: "Prefab db:// path (alternative to uuid)" },
-                        force: { type: "boolean", description: "Skip dirty-scene preflight check (may trigger modal save dialog)" },
+                        action: { type: "string", description: "'open' | 'close'" },
+                        uuid: { type: "string", description: "Prefab asset UUID (action=open)" },
+                        path: { type: "string", description: "Prefab db:// path (action=open, alternative to uuid)" },
+                        save: { type: "boolean", description: "Save prefab before closing (action=close, default true)" },
+                        sceneUuid: { type: "string", description: "Scene UUID to return to on close (default: start scene)" },
+                        force: { type: "boolean", description: "Skip dirty-scene preflight" },
                     },
-                },
-            },
-            {
-                name: "prefab_close",
-                description: "Save and close the current prefab editing mode, then return to the main scene. Returns an error if the current prefab is dirty and untitled (to avoid modal save dialog); pass force=true to bypass.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        save: { type: "boolean", description: "Save prefab before closing (default true)" },
-                        sceneUuid: { type: "string", description: "Scene UUID to return to (default: project's start scene or first scene)" },
-                        force: { type: "boolean", description: "Skip dirty-scene preflight check (may trigger modal save dialog)" },
-                    },
+                    required: ["action"],
                 },
             },
             {
@@ -198,10 +190,10 @@ export class PrefabTools implements ToolCategory {
                 return this.revertPrefab(args.uuid);
             case "prefab_create_and_replace":
                 return this.createAndReplace(args.uuid, args.path);
-            case "prefab_open":
-                return this.openPrefab(args.uuid, args.path, !!args.force);
-            case "prefab_close":
-                return this.closePrefab(args.save !== false, args.sceneUuid, !!args.force);
+            case "prefab_edit":
+                if (args.action === "open") return this.openPrefab(args.uuid, args.path, !!args.force);
+                if (args.action === "close") return this.closePrefab(args.save !== false, args.sceneUuid, !!args.force);
+                return err(`Unknown prefab_edit action: ${args.action}. Expected 'open' or 'close'.`);
             case "prefab_create_from_spec":
                 return this.createFromSpec(args.path, parseMaybeJson(args.spec), args.autoBindMode ?? "fuzzy");
             default:

@@ -147,6 +147,9 @@ const V1_TO_V2_TOOL_MAP = {
     "scene_reset_property": "scene_reset:property",
     "scene_reset_component": "scene_reset:component",
     "scene_restore_prefab": "scene_reset:restore_prefab",
+    // prefab edit 集約
+    "prefab_open": "prefab_edit:open",
+    "prefab_close": "prefab_edit:close",
 };
 
 // 旧ツールで使われていた param 名 → 新ツールの param 名
@@ -227,10 +230,10 @@ const ALL_TOOLS = [
     "node_get_all", "node_get_info",
     "node_set_active", "node_set_layout", "node_set_property", "node_set_transform",
     "node_create_tree",
-    // prefab (未集約)
-    "prefab_close", "prefab_create", "prefab_create_and_replace", "prefab_create_from_spec",
+    // prefab (一部集約: prefab_edit)
+    "prefab_edit", "prefab_create", "prefab_create_and_replace", "prefab_create_from_spec",
     "prefab_duplicate", "prefab_get_info", "prefab_instantiate",
-    "prefab_list", "prefab_open", "prefab_revert", "prefab_update", "prefab_validate",
+    "prefab_list", "prefab_revert", "prefab_update", "prefab_validate",
     // preferences (集約済): preferences_manage
     "preferences_manage",
     // project (現状維持)

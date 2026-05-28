@@ -32,8 +32,136 @@ async function callMcp(method, params = {}) {
     return res.json();
 }
 
+// v2.0.0: 旧ツール名を新 category_action ツールへ自動変換するテスト側互換層。
+// 本番コード (拡張本体) には互換層を入れない方針 ([[feedback_cocos_mcp_v2_remove_unused]])。
+// テストロジックを温存しながら v2 ツールを叩くためのテスト専用 shim。
+const V1_TO_V2_TOOL_MAP = {
+    // node
+    "node_create": "node_manage:create",
+    "node_delete": "node_manage:delete",
+    "node_duplicate": "node_manage:duplicate",
+    "node_move": "node_manage:move",
+    // component
+    "component_add": "component_manage:add",
+    "component_remove": "component_manage:remove",
+    "component_get_available": "component_manage:available",
+    "component_query_enum": "component_manage:enum",
+    // scene main lifecycle
+    "scene_get_hierarchy": "scene_manage:hierarchy",
+    "scene_save": "scene_manage:save",
+    "scene_get_list": "scene_manage:list",
+    "scene_get_current": "scene_manage:current",
+    "scene_open": "scene_manage:open",
+    "scene_close": "scene_manage:close",
+    // preferences
+    "preferences_get": "preferences_manage:get",
+    "preferences_set": "preferences_manage:set",
+    "preferences_get_all": "preferences_manage:get_all",
+    "preferences_reset": "preferences_manage:reset",
+    // builder
+    "builder_open_panel": "builder_manage:open_panel",
+    "builder_get_settings": "builder_manage:get_settings",
+    "builder_query_tasks": "builder_manage:query_tasks",
+    "builder_run_preview": "builder_manage:run_preview",
+    "builder_stop_preview": "builder_manage:stop_preview",
+    // server
+    "server_query_ip_list": "server_status:ips",
+    "server_query_port": "server_status:port",
+    "server_get_status": "server_status:get",
+    "server_get_build_hash": "server_status:build_hash",
+    "server_check_connectivity": "server_status:connectivity",
+    "server_get_network_interfaces": "server_status:interfaces",
+    "server_check_code_sync": "server_status:code_sync",
+    // refimage
+    "refimage_add": "refimage_manage:add",
+    "refimage_remove": "refimage_manage:remove",
+    "refimage_clear_all": "refimage_manage:clear_all",
+    "refimage_switch": "refimage_manage:switch",
+    "refimage_refresh": "refimage_manage:refresh",
+    "refimage_set_position": "refimage_set:position",
+    "refimage_set_scale": "refimage_set:scale",
+    "refimage_set_opacity": "refimage_set:opacity",
+    "refimage_list": "refimage_query:list",
+    "refimage_query_config": "refimage_query:list",
+    "refimage_query_current": "refimage_query:current",
+    // view
+    "view_change_gizmo_tool": "view_gizmo:set_tool",
+    "view_query_gizmo_tool": "view_gizmo:get_tool",
+    "view_change_gizmo_pivot": "view_gizmo:set_pivot",
+    "view_query_gizmo_pivot": "view_gizmo:get_pivot",
+    "view_change_gizmo_coordinate": "view_gizmo:set_coordinate",
+    "view_query_gizmo_coordinate": "view_gizmo:get_coordinate",
+    "view_change_mode_2d_3d": "view_settings:set_mode",
+    "view_query_mode_2d_3d": "view_settings:get_mode",
+    "view_set_grid_visible": "view_settings:set_grid",
+    "view_query_grid_visible": "view_settings:get_grid",
+    "view_set_icon_gizmo_3d": "view_settings:set_icon3d",
+    "view_query_icon_gizmo_3d": "view_settings:get_icon3d",
+    "view_set_icon_gizmo_size": "view_settings:set_icon_size",
+    "view_query_icon_gizmo_size": "view_settings:get_icon_size",
+    "view_get_status": "view_settings:status",
+    "view_reset": "view_settings:reset",
+    "view_focus_on_node": "view_camera:focus_on_nodes",
+    "view_align_with_view": "view_camera:align_with_view",
+    "view_align_view_with_node": "view_camera:align_view_with_node",
+    // asset
+    "asset_create": "asset_manage:create",
+    "asset_delete": "asset_manage:delete",
+    "asset_move": "asset_manage:move",
+    "asset_copy": "asset_manage:copy",
+    "asset_save": "asset_manage:save",
+    "asset_reimport": "asset_manage:reimport",
+    "asset_import": "asset_manage:import",
+    "asset_save_meta": "asset_manage:save_meta",
+    "asset_open_external": "asset_manage:open_external",
+    "asset_query_path": "asset_query:path",
+    "asset_query_uuid": "asset_query:uuid",
+    "asset_query_url": "asset_query:url",
+    "asset_get_details": "asset_query:details",
+    "asset_get_dependencies": "asset_query:dependencies",
+    "asset_query_users": "asset_query:users",
+    "asset_query_missing": "asset_query:missing",
+    "asset_query_ready": "asset_query:ready",
+    "asset_generate_available_url": "asset_query:generate_url",
+    // debug 集約
+    "debug_get_project_logs": "debug_logs:get",
+    "debug_search_project_logs": "debug_logs:search",
+    "debug_get_log_file_info": "debug_logs:info",
+    "debug_list_extensions": "debug_extension:list",
+    "debug_get_extension_info": "debug_extension:info",
+    "debug_reload_extension": "debug_extension:reload",
+    "debug_record_start": "debug_record:start",
+    "debug_record_stop": "debug_record:stop",
+};
+
+// 旧ツールで使われていた param 名 → 新ツールの param 名
+const V1_PARAM_REMAP = {
+    "node_move": { parentUuid: "parent" },
+    "debug_search_project_logs": { keyword: "pattern" },
+    // 旧テストには scene_open に uuid を渡す箇所が残っていたが、v1 でも scene が正規。
+    // scene_manage(open) で scene パラメータに揃える
+    "scene_open": { uuid: "scene" },
+};
+
 async function callTool(name, args = {}) {
-    const res = await callMcp("tools/call", { name, arguments: args });
+    let toolName = name;
+    let argsToSend = args;
+    const mapped = V1_TO_V2_TOOL_MAP[name];
+    if (mapped) {
+        const [newName, action] = mapped.split(":");
+        toolName = newName;
+        argsToSend = { ...args, action };
+        const remap = V1_PARAM_REMAP[name];
+        if (remap) {
+            for (const [oldKey, newKey] of Object.entries(remap)) {
+                if (oldKey in argsToSend) {
+                    argsToSend[newKey] = argsToSend[oldKey];
+                    if (oldKey !== newKey) delete argsToSend[oldKey];
+                }
+            }
+        }
+    }
+    const res = await callMcp("tools/call", { name: toolName, arguments: argsToSend });
     if (res.error) return { _rpcError: res.error };
     const text = res.result?.content?.[0]?.text;
     return text ? JSON.parse(text) : res.result;
@@ -54,58 +182,57 @@ function skip(label) {
     skipped++;
 }
 
-// ── ALL 146 tool names ──
+// ── v2.0.0 tool names (post Phase 2 集約) ──
 const ALL_TOOLS = [
-    "asset_copy", "asset_create", "asset_delete", "asset_generate_available_url",
-    "asset_get_dependencies", "asset_get_details", "asset_import", "asset_move",
-    "asset_open_external", "asset_query_missing", "asset_query_path", "asset_query_ready",
-    "asset_query_url", "asset_query_users", "asset_query_uuid", "asset_reimport",
-    "asset_save", "asset_save_meta",
-    "builder_get_settings", "builder_open_panel", "builder_query_tasks",
-    "builder_run_preview", "builder_stop_preview",
-    "component_add", "component_auto_bind", "component_get_available", "component_get_components",
-    "component_get_info", "component_query_enum", "component_remove", "component_set_property",
-    "debug_clear_console", "debug_execute_script", "debug_get_console_logs", "read_console",
-    "execute_editor_script",
-    "debug_get_editor_info", "debug_get_extension_info", "debug_get_log_file_info",
-    "debug_get_project_logs", "debug_list_extensions", "debug_list_messages",
-    "debug_open_url", "debug_query_devices", "debug_search_project_logs", "debug_validate_scene",
+    // asset (集約済): asset_manage, asset_query
+    "asset_manage", "asset_query",
+    // builder (集約済): builder_manage
+    "builder_manage",
+    // component: component_manage + 個別ツール
+    "component_manage", "component_auto_bind", "component_get_components",
+    "component_get_info", "component_set_property",
+    // debug: 集約済 + 残り個別
+    "debug_logs", "debug_extension", "debug_record",
+    "debug_clear_console", "debug_execute_script", "debug_get_console_logs",
+    "read_console", "execute_editor_script",
+    "debug_get_editor_info", "debug_list_messages",
+    "debug_open_url", "debug_query_devices", "debug_validate_scene",
     "debug_batch_screenshot", "debug_clear_code_cache", "debug_game_command",
-    "debug_preview", "debug_screenshot",
-    "debug_record_start", "debug_record_stop", "debug_wait_compile",
-    "node_create", "node_delete", "node_detect_type", "node_duplicate", "node_find_by_name",
-    "node_get_all", "node_get_info", "node_move", "node_set_active", "node_set_layer",
-    "node_set_layout", "node_set_property", "node_set_transform",
+    "debug_preview", "debug_screenshot", "debug_wait_compile",
+    // node (集約済): node_manage + 個別ツール
+    "node_manage", "node_detect_type", "node_find_by_name",
+    "node_get_all", "node_get_info",
+    "node_set_active", "node_set_layout", "node_set_property", "node_set_transform",
+    "node_create_tree",
+    // prefab (未集約)
     "prefab_close", "prefab_create", "prefab_create_and_replace", "prefab_create_from_spec",
     "prefab_duplicate", "prefab_get_info", "prefab_instantiate",
     "prefab_list", "prefab_open", "prefab_revert", "prefab_update", "prefab_validate",
-    "preferences_get", "preferences_get_all", "preferences_reset", "preferences_set",
+    // preferences (集約済): preferences_manage
+    "preferences_manage",
+    // project (現状維持)
     "project_find_asset", "project_get_asset_info", "project_get_engine_info",
     "project_get_info", "project_get_settings", "project_query_scripts",
     "project_refresh_assets", "project_set_settings",
-    "refimage_add", "refimage_clear_all", "refimage_list", "refimage_query_config",
-    "refimage_query_current", "refimage_refresh", "refimage_remove",
-    "refimage_set_opacity", "refimage_set_position", "refimage_set_scale", "refimage_switch",
-    "scene_begin_undo", "scene_cancel_undo", "scene_close", "scene_copy_node",
+    // refimage (集約済): refimage_manage / set / query
+    "refimage_manage", "refimage_set", "refimage_query",
+    // scene main (集約済): scene_manage
+    "scene_manage",
+    // scene-advanced (未集約)
+    "scene_begin_undo", "scene_cancel_undo", "scene_copy_node",
     "scene_create", "scene_cut_node", "scene_end_undo",
-    "scene_execute_component_method", "scene_execute_script", "scene_get_current",
-    "scene_get_hierarchy", "scene_get_list", "scene_move_array_element",
-    "scene_open", "scene_paste_node", "scene_query_classes",
+    "scene_execute_component_method", "scene_execute_script",
+    "scene_move_array_element", "scene_paste_node", "scene_query_classes",
     "scene_query_component", "scene_query_component_has_script", "scene_query_components",
     "scene_query_dirty", "scene_query_node", "scene_query_node_tree",
     "scene_query_nodes_by_asset", "scene_query_ready", "scene_query_scene_bounds",
     "scene_remove_array_element", "scene_reset_component", "scene_reset_node_transform",
-    "scene_reset_property", "scene_restore_prefab", "scene_save", "scene_save_as",
+    "scene_reset_property", "scene_restore_prefab", "scene_save_as",
     "scene_set_parent", "scene_snapshot", "scene_snapshot_abort", "scene_soft_reload",
-    "server_check_code_sync", "server_check_connectivity", "server_get_network_interfaces",
-    "server_get_status", "server_query_ip_list", "server_query_port",
-    "view_align_view_with_node", "view_align_with_view",
-    "view_change_gizmo_coordinate", "view_change_gizmo_pivot", "view_change_gizmo_tool",
-    "view_change_mode_2d_3d", "view_focus_on_node", "view_get_status",
-    "view_query_gizmo_coordinate", "view_query_gizmo_pivot", "view_query_gizmo_tool",
-    "view_query_grid_visible", "view_query_icon_gizmo_3d", "view_query_icon_gizmo_size",
-    "view_query_mode_2d_3d", "view_reset",
-    "view_set_grid_visible", "view_set_icon_gizmo_3d", "view_set_icon_gizmo_size",
+    // server (集約済): server_status
+    "server_status",
+    // view (集約済): view_gizmo / settings / camera
+    "view_gizmo", "view_settings", "view_camera",
 ];
 
 // ── tests ──
@@ -115,7 +242,7 @@ async function testHealth() {
     const res = await fetch(`${BASE}/health`);
     const data = await res.json();
     assert(data.status === "ok", "health status ok");
-    assert(data.tools >= 148, `tool count >= 148 (got ${data.tools})`);
+    assert(data.tools >= 80, `tool count >= 80 (v2.0.0 集約後; got ${data.tools})`);
 }
 
 async function testInitialize() {
@@ -138,7 +265,7 @@ async function testToolsList() {
     console.log("\n── tools/list ──");
     const res = await callMcp("tools/list", {});
     const tools = res.result?.tools || [];
-    assert(tools.length >= 148, `tool count >= 148 (got ${tools.length})`);
+    assert(tools.length >= 80, `tool count >= 80 (v2.0.0; got ${tools.length})`);
 
     const names = tools.map((t) => t.name);
     for (const name of ALL_TOOLS) {
@@ -147,27 +274,30 @@ async function testToolsList() {
 }
 
 async function testSceneTools() {
-    console.log("\n── scene tools ──");
-    const hier = await callTool("scene_get_hierarchy", { includeComponents: true });
-    assert(hier.success === true, "get_hierarchy success");
+    console.log("\n── scene tools (v2: scene_manage) ──");
+    const hier = await callTool("scene_manage", { action: "hierarchy", includeComponents: true });
+    assert(hier.success === true, "scene_manage(hierarchy) success");
     assert(!!hier.sceneName, `scene: ${hier.sceneName}`);
     const canvas = hier.hierarchy?.find((n) => n.name === "Canvas");
     assert(!!canvas, "Canvas found");
 
-    const list = await callTool("scene_get_list");
-    assert(list.success === true, "get_list success");
+    const list = await callTool("scene_manage", { action: "list" });
+    assert(list.success === true, "scene_manage(list) success");
 
-    const save = await callTool("scene_save");
-    assert(save.success === true || !save._rpcError, "save ok");
+    const save = await callTool("scene_manage", { action: "save" });
+    assert(save.success === true || !save._rpcError, "scene_manage(save) ok");
+
+    const current = await callTool("scene_manage", { action: "current" });
+    assert(!!current.sceneName, "scene_manage(current) has sceneName");
 }
 
 async function testNodeCrud() {
-    console.log("\n── node CRUD ──");
-    const hier = await callTool("scene_get_hierarchy");
+    console.log("\n── node CRUD (v2: node_manage) ──");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
 
-    const created = await callTool("node_create", { name: "V1TestNode", parent: canvasUuid });
-    assert(created.success === true, "create");
+    const created = await callTool("node_manage", { action: "create", name: "V1TestNode", parent: canvasUuid });
+    assert(created.success === true, "node_manage(create)");
     const uuid = created.uuid;
 
     const info = await callTool("node_get_info", { uuid });
@@ -191,32 +321,32 @@ async function testNodeCrud() {
     const all = await callTool("node_get_all");
     assert(!!all.data?.find((n) => n.uuid === uuid), "get_all");
 
-    const duped = await callTool("node_duplicate", { uuid });
-    assert(duped.success === true, "duplicate");
+    const duped = await callTool("node_manage", { action: "duplicate", uuid });
+    assert(duped.success === true, "node_manage(duplicate)");
     const dupUuid = Array.isArray(duped.newUuid) ? duped.newUuid[0] : duped.newUuid;
 
     if (dupUuid) {
-        const moved = await callTool("node_move", { uuid: dupUuid, parentUuid: uuid });
+        const moved = await callTool("node_manage", { action: "move", uuid: dupUuid, parent: uuid });
         if (moved.success === true) {
-            assert(true, "move");
+            assert(true, "node_manage(move)");
         } else {
             skip("move (requires restart)");
         }
-        await callTool("node_delete", { uuid: dupUuid });
+        await callTool("node_manage", { action: "delete", uuid: dupUuid });
     }
-    await callTool("node_delete", { uuid });
-    assert(true, "delete + cleanup");
+    await callTool("node_manage", { action: "delete", uuid });
+    assert(true, "node_manage(delete) + cleanup");
 }
 
 async function testComponentTools() {
-    console.log("\n── component tools ──");
-    const hier = await callTool("scene_get_hierarchy");
+    console.log("\n── component tools (v2: component_manage) ──");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
-    const created = await callTool("node_create", { name: "CompV1Test", parent: canvasUuid });
+    const created = await callTool("node_manage", { action: "create", name: "CompV1Test", parent: canvasUuid });
     const uuid = created.uuid;
 
-    const added = await callTool("component_add", { uuid, componentType: "cc.Label" });
-    assert(added.success === true, "add");
+    const added = await callTool("component_manage", { action: "add", uuid, componentType: "cc.Label" });
+    assert(added.success === true, "component_manage(add)");
 
     const comps = await callTool("component_get_components", { uuid });
     assert(comps.components?.some((c) => c.type === "Label"), "get_components");
@@ -227,21 +357,21 @@ async function testComponentTools() {
     const set2 = await callTool("component_set_property", { uuid, componentType: "cc.Label", property: "fontSize", value: 64 });
     assert(set2.success === true, "set_property fontSize");
 
-    const removed = await callTool("component_remove", { uuid, componentType: "cc.Label" });
-    assert(removed.success === true, "remove");
+    const removed = await callTool("component_manage", { action: "remove", uuid, componentType: "cc.Label" });
+    assert(removed.success === true, "component_manage(remove)");
 
-    await callTool("node_delete", { uuid });
+    await callTool("node_manage", { action: "delete", uuid });
 }
 
 async function testPrefabTools() {
     console.log("\n── prefab tools ──");
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
 
     const list = await callTool("prefab_list");
     assert(list.success === true, "list");
 
-    const created = await callTool("node_create", { name: "PrefabV1Test", parent: canvasUuid, components: ["cc.Label"] });
+    const created = await callTool("node_manage", { action: "create", name: "PrefabV1Test", parent: canvasUuid, components: ["cc.Label"] });
     const uuid = created.uuid;
     await callTool("component_set_property", { uuid, componentType: "cc.Label", property: "string", value: "v1prefab" });
 
@@ -665,13 +795,13 @@ async function testV16NewTools() {
     assert(syncResult.runtimeHash != null, `runtimeHash: ${syncResult.runtimeHash}`);
     assert(syncResult.diskHash != null, `diskHash: ${syncResult.diskHash}`);
 
-    // 5. component_query_enum registered
-    const enumTool = toolsList.result?.tools?.find((t) => t.name === "component_query_enum");
-    assert(!!enumTool, "component_query_enum registered");
+    // 5. component_manage registered (v2.0.0: 旧 component_query_enum / component_add 等を集約)
+    const compTool = toolsList.result?.tools?.find((t) => t.name === "component_manage");
+    assert(!!compTool, "component_manage registered (v2)");
 
-    // 6. server_check_code_sync registered
-    const syncTool = toolsList.result?.tools?.find((t) => t.name === "server_check_code_sync");
-    assert(!!syncTool, "server_check_code_sync registered");
+    // 6. server_status registered (v2.0.0: 旧 server_check_code_sync / server_get_status 等を集約)
+    const syncTool = toolsList.result?.tools?.find((t) => t.name === "server_status");
+    assert(!!syncTool, "server_status registered (v2)");
 }
 
 async function testV18NewTools() {
@@ -1520,11 +1650,11 @@ async function testUncoveredTools() {
             await callTool("node_delete", { uuid: pNode.uuid });
         }
 
-        // node_set_layer
+        // node layer setting (v2.0.0: node_set_layer 廃止、node_set_property に統合)
         const layerNode = await callTool("node_create", { name: "LayerTest", parent: canvasUuid });
         if (layerNode.uuid) {
-            const sl = await callTool("node_set_layer", { uuid: layerNode.uuid, layer: 1 << 25 });
-            assert(sl.success === true || !sl._rpcError, "node_set_layer");
+            const sl = await callTool("node_set_property", { uuid: layerNode.uuid, property: "layer", value: 1 << 25 });
+            assert(sl.success === true || !sl._rpcError, "node_set_property(layer)");
             await callTool("node_delete", { uuid: layerNode.uuid });
         }
 

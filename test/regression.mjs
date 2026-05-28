@@ -1203,6 +1203,98 @@ async function testComponentSetPropertyV2() {
     }
 }
 
+async function testResourceApi() {
+    console.log("\n── Resource API (v2.0.0) ──");
+
+    // 1. resources/list
+    const listRes = await callMcp("resources/list", {});
+    const resources = listRes.result?.resources || [];
+    assert(Array.isArray(resources), "resources/list returns array");
+    assert(resources.length >= 8, `resources count >= 8 (got ${resources.length})`);
+    const fixedUris = new Set(resources.map((r) => r.uri));
+    assert(fixedUris.has("cocos://scene/current"), "cocos://scene/current listed");
+    assert(fixedUris.has("cocos://scene/list"), "cocos://scene/list listed");
+    assert(fixedUris.has("cocos://scene/hierarchy"), "cocos://scene/hierarchy listed");
+    assert(fixedUris.has("cocos://project/info"), "cocos://project/info listed");
+    assert(fixedUris.has("cocos://editor/info"), "cocos://editor/info listed");
+
+    // 2. resources/templates/list
+    const tplRes = await callMcp("resources/templates/list", {});
+    const templates = tplRes.result?.resourceTemplates || [];
+    assert(Array.isArray(templates), "templates list returns array");
+    const tplUris = new Set(templates.map((t) => t.uriTemplate));
+    assert(tplUris.has("cocos://node/{uuid}"), "node/{uuid} template listed");
+    assert(tplUris.has("cocos://node/{uuid}/components"), "node/{uuid}/components template listed");
+    assert(tplUris.has("cocos://component/{uuid}"), "component/{uuid} template listed");
+    assert(tplUris.has("cocos://prefab/{uuid}"), "prefab/{uuid} template listed");
+    assert(tplUris.has("cocos://asset/{uuid}"), "asset/{uuid} template listed");
+
+    // helper: read a resource and return parsed JSON
+    async function readResource(uri) {
+        const r = await callMcp("resources/read", { uri });
+        if (r.error) return { _rpcError: r.error };
+        const text = r.result?.contents?.[0]?.text;
+        if (text === undefined) return { _missing: true };
+        try { return JSON.parse(text); } catch { return { _unparseable: text }; }
+    }
+
+    // 3. cocos://editor/info — editor の基本情報
+    const editorInfo = await readResource("cocos://editor/info");
+    assert(!editorInfo._rpcError, "read cocos://editor/info");
+    assert(typeof editorInfo.version === "string", `editor.version present (got ${typeof editorInfo.version})`);
+
+    // 4. cocos://project/info
+    const projectInfo = await readResource("cocos://project/info");
+    assert(!projectInfo._rpcError, "read cocos://project/info");
+    assert(typeof projectInfo.name === "string" && typeof projectInfo.path === "string",
+        "project.name and project.path present");
+
+    // 5. cocos://scene/current
+    const sceneCurrent = await readResource("cocos://scene/current");
+    assert(!sceneCurrent._rpcError, "read cocos://scene/current");
+    assert(typeof sceneCurrent.name === "string" || typeof sceneCurrent.uuid === "string",
+        "scene.current has name or uuid");
+
+    // 6. cocos://scene/list
+    const sceneList = await readResource("cocos://scene/list");
+    assert(!sceneList._rpcError, "read cocos://scene/list");
+    assert(Array.isArray(sceneList.scenes), "scene/list returns scenes[]");
+
+    // 7. cocos://scene/hierarchy
+    const sceneHier = await readResource("cocos://scene/hierarchy");
+    assert(!sceneHier._rpcError, "read cocos://scene/hierarchy");
+    assert(sceneHier.hierarchy !== undefined, "scene/hierarchy has hierarchy field");
+
+    // 8. cocos://node/{uuid} — Canvas UUID で実体取得
+    const hier = await callTool("scene_get_hierarchy");
+    const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
+    if (canvasUuid) {
+        const nodeDump = await readResource(`cocos://node/${canvasUuid}`);
+        assert(!nodeDump._rpcError, `read cocos://node/${canvasUuid}`);
+        assert(nodeDump.__comps__ !== undefined || nodeDump.name !== undefined,
+            "node dump has __comps__ or name field");
+
+        // 9. cocos://node/{uuid}/components — components list
+        const nodeComps = await readResource(`cocos://node/${canvasUuid}/components`);
+        assert(!nodeComps._rpcError, "read node/{uuid}/components");
+        assert(Array.isArray(nodeComps.components), "components is array");
+    } else {
+        skip("Canvas UUID not found — skipping node resource tests");
+    }
+
+    // 10. 不正な URI (定義済みでない) → error
+    const badUri = await callMcp("resources/read", { uri: "cocos://unknown/foo" });
+    assert(!!badUri.error, "unknown URI returns error");
+
+    // 11. uri 省略 → error
+    const noUri = await callMcp("resources/read", {});
+    assert(!!noUri.error, "missing uri returns error");
+
+    // 12. template URI に値が無い場合 (placeholder のまま) → error
+    const placeholderUri = await callMcp("resources/read", { uri: "cocos://node/{uuid}" });
+    assert(!!placeholderUri.error, "placeholder URI is not auto-matched");
+}
+
 async function testExecuteEditorScript() {
     console.log("\n── execute_editor_script (v2.0.0) ──");
 
@@ -1933,6 +2025,7 @@ async function main() {
     await testComponentSetPropertyV2();
     await testReadConsole();
     await testExecuteEditorScript();
+    await testResourceApi();
     await testUncoveredTools();
     await cleanupOrphanNodes();
 

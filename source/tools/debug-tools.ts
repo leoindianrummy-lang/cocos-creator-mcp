@@ -493,11 +493,14 @@ export class DebugTools implements ToolCategory {
             }
         }
 
-        // editor source — Step 3 で実装。現状は試行のみ
+        // editor source
         if (sources.includes("editor")) {
+            let viaApi = false;
+            // 1. Try native console API first
             try {
                 const logs = await (Editor.Message.request as any)("console", "query-last-logs", opts.count * 2);
-                if (Array.isArray(logs)) {
+                if (Array.isArray(logs) && logs.length > 0) {
+                    viaApi = true;
                     for (const l of logs) {
                         entries.push({
                             timestamp: l.timestamp || new Date().toISOString(),
@@ -508,7 +511,17 @@ export class DebugTools implements ToolCategory {
                         });
                     }
                 }
-            } catch { /* Editor console API not supported in this version — Step 3 で project.log fallback を追加 */ }
+            } catch { /* not supported in this version → fallback */ }
+
+            // 2. Fallback: parse project.log tail for compile error / warning patterns
+            if (!viaApi) {
+                try {
+                    const parsed = await readProjectLogTail(opts.count * 2);
+                    for (const e of parsed) {
+                        entries.push({ ...e, source: "editor" });
+                    }
+                } catch { /* project.log unavailable */ }
+            }
         }
 
         // Apply filters
@@ -978,4 +991,79 @@ function normalizeType(raw: any): string {
 /** Escape a string so it can be embedded into a RegExp literally. */
 function escapeRegex(s: string): string {
     return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * project.log の末尾を読み、Cocos Creator が書き出す compile error / warning /
+ * generic message を構造化エントリに変換する。
+ *
+ * Cocos Creator が project.log に書き出す代表的なパターン:
+ *   [11:22:33] [info] message...
+ *   [11:22:33] [warn] message...
+ *   [11:22:33] [error] message... (TS2304: Cannot find name 'Foo' など)
+ *   [Scene] [error] file: assets/.../Foo.ts(12,5)
+ *
+ * Editor バージョンや locale により書式は変わる可能性があるので、行頭の
+ * `[ts] [level]` パターンと、`error TS\d+:` の TypeScript エラー、
+ * `[level]` 単独行など複数パターンを許容する。
+ */
+async function readProjectLogTail(maxEntries: number): Promise<Array<{ timestamp: string; type: string; message: string; stacktrace?: string }>> {
+    const fs = require("fs");
+    const path = require("path");
+    const logPath = path.join(Editor.Project.tmpDir, "logs", "project.log");
+    if (!fs.existsSync(logPath)) return [];
+
+    const stat = fs.statSync(logPath);
+    // 末尾 256KB を読む（compile error は大きくないので十分）
+    const READ_BYTES = 256 * 1024;
+    const start = Math.max(0, stat.size - READ_BYTES);
+    const fd = fs.openSync(logPath, "r");
+    const buffer = Buffer.alloc(stat.size - start);
+    fs.readSync(fd, buffer, 0, buffer.length, start);
+    fs.closeSync(fd);
+    const text = buffer.toString("utf8");
+
+    const lines = text.split(/\r?\n/);
+    // 部分行（先頭行は切れている可能性）を捨てる
+    if (start > 0 && lines.length > 0) lines.shift();
+
+    const entries: Array<{ timestamp: string; type: string; message: string; stacktrace?: string }> = [];
+    const lineRe = /^\[(\d{2}:\d{2}:\d{2}(?:\.\d+)?)\]\s*(?:\[([^\]]+)\])?\s*\[?(log|info|warn|warning|error)\]?\s*(.*)$/i;
+    const tsErrRe = /\berror\s+TS\d+:\s*/i;
+    const today = new Date();
+    const isoDate = today.toISOString().slice(0, 10);
+
+    let pending: { timestamp: string; type: string; message: string; stacktrace?: string } | null = null;
+
+    for (const raw of lines) {
+        const line = raw.replace(/\[[0-9;]*m/g, ""); // strip ANSI color codes
+        if (!line.trim()) continue;
+
+        const m = line.match(lineRe);
+        if (m) {
+            if (pending) entries.push(pending);
+            const [, time, tag, level, body] = m;
+            const ts = `${isoDate}T${time}${time.length === 8 ? ".000" : ""}Z`;
+            pending = {
+                timestamp: ts,
+                type: normalizeType(level),
+                message: tag ? `[${tag}] ${body}` : body,
+            };
+        } else if (tsErrRe.test(line)) {
+            // TypeScript エラー単独行（タイムスタンプなし）
+            if (pending) entries.push(pending);
+            pending = {
+                timestamp: new Date().toISOString(),
+                type: "error",
+                message: line.trim(),
+            };
+        } else if (pending) {
+            // 継続行 — stacktrace に追加
+            pending.stacktrace = pending.stacktrace ? `${pending.stacktrace}\n${line}` : line;
+        }
+    }
+    if (pending) entries.push(pending);
+
+    // 末尾 maxEntries 件
+    return entries.slice(-maxEntries);
 }

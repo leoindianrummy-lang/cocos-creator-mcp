@@ -132,6 +132,21 @@ const V1_TO_V2_TOOL_MAP = {
     "debug_reload_extension": "debug_extension:reload",
     "debug_record_start": "debug_record:start",
     "debug_record_stop": "debug_record:stop",
+    // scene-advanced 集約 (Phase 2-r1)
+    "scene_copy_node": "scene_clipboard:copy",
+    "scene_paste_node": "scene_clipboard:paste",
+    "scene_cut_node": "scene_clipboard:cut",
+    "scene_snapshot": "scene_undo:snapshot",
+    "scene_snapshot_abort": "scene_undo:snapshot_abort",
+    "scene_begin_undo": "scene_undo:begin",
+    "scene_end_undo": "scene_undo:end",
+    "scene_cancel_undo": "scene_undo:cancel",
+    "scene_move_array_element": "scene_array:move",
+    "scene_remove_array_element": "scene_array:remove",
+    "scene_reset_node_transform": "scene_reset:transform",
+    "scene_reset_property": "scene_reset:property",
+    "scene_reset_component": "scene_reset:component",
+    "scene_restore_prefab": "scene_reset:restore_prefab",
 };
 
 // 旧ツールで使われていた param 名 → 新ツールの param 名
@@ -226,17 +241,16 @@ const ALL_TOOLS = [
     "refimage_manage", "refimage_set", "refimage_query",
     // scene main (集約済): scene_manage
     "scene_manage",
-    // scene-advanced (未集約)
-    "scene_begin_undo", "scene_cancel_undo", "scene_copy_node",
-    "scene_create", "scene_cut_node", "scene_end_undo",
+    // scene-advanced 集約済: clipboard / undo / array / reset
+    "scene_clipboard", "scene_undo", "scene_array", "scene_reset",
+    // 残存 scene-advanced 個別ツール
+    "scene_create", "scene_save_as",
     "scene_execute_component_method", "scene_execute_script",
-    "scene_move_array_element", "scene_paste_node", "scene_query_classes",
-    "scene_query_component", "scene_query_component_has_script", "scene_query_components",
-    "scene_query_dirty", "scene_query_node", "scene_query_node_tree",
-    "scene_query_nodes_by_asset", "scene_query_ready", "scene_query_scene_bounds",
-    "scene_remove_array_element", "scene_reset_component", "scene_reset_node_transform",
-    "scene_reset_property", "scene_restore_prefab", "scene_save_as",
-    "scene_set_parent", "scene_snapshot", "scene_snapshot_abort", "scene_soft_reload",
+    "scene_query_classes", "scene_query_component", "scene_query_component_has_script",
+    "scene_query_components", "scene_query_dirty", "scene_query_node",
+    "scene_query_node_tree", "scene_query_nodes_by_asset",
+    "scene_query_ready", "scene_query_scene_bounds",
+    "scene_set_parent", "scene_soft_reload",
     // server (集約済): server_status
     "server_status",
     // view (集約済): view_gizmo / settings / camera

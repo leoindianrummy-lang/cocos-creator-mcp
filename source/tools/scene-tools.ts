@@ -186,7 +186,7 @@ export class SceneTools implements ToolCategory {
         return [
             {
                 name: "scene_manage",
-                description: "Scene lifecycle operations. Actions: 'open' (scene UUID or db:// path [+ force]), 'save' (save current), 'close' ([+ force]), 'list' (all scenes in project), 'current' (current scene name+uuid), 'hierarchy' (current scene node tree [+ includeComponents]). Read-only actions (list/current/hierarchy) also available via cocos://scene/* resource URIs. For 'open' / 'close', if the current scene is dirty and untitled, returns an error instead of triggering a modal save dialog; pass force=true to bypass.",
+                description: "Scene lifecycle operations. Actions: 'open' (scene UUID or db:// path [+ force]), 'save' (save current), 'close' ([+ force]), 'list' (all scenes), 'current' (current scene name+uuid), 'hierarchy' (current node tree [+ includeComponents]). For create/save_as see scene-advanced tools. Read-only actions (list/current/hierarchy) also via cocos://scene/* resources. open/close with dirty-untitled current scene returns error unless force=true.",
                 inputSchema: {
                     type: "object",
                     properties: {

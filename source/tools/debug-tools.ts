@@ -232,6 +232,19 @@ export class DebugTools implements ToolCategory {
                 },
             },
             {
+                name: "execute_editor_script",
+                description: "ESCAPE HATCH (v2.0.0). Execute arbitrary JavaScript in the editor's scene process. Use for operations not covered by other tools: atomic transactions, experimental APIs, bulk operations, project-specific workflows. Code is wrapped in an async function so 'await' is usable directly. Available globals: Editor (Message API), cc (engine module), console. Return values are serialized; cc.Node / cc.Component instances become summary objects. WARNING: full Editor process privileges — local development only, never expose to untrusted callers.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        code: { type: "string", description: "JavaScript code. Use `return <expr>` to return a value. Async / await supported." },
+                        timeoutMs: { type: "number", description: "Max execution time in ms (default: 5000)." },
+                        returnLogs: { type: "boolean", description: "If true, captures console.log/warn/error during execution and returns them in `logs` (default: false)." },
+                    },
+                    required: ["code"],
+                },
+            },
+            {
                 name: "debug_wait_compile",
                 description: "Wait for TypeScript compilation to complete. Monitors the packer-driver debug log for 'Target(editor) ends' message. Use after modifying .ts files to ensure changes are compiled before operating on Prefabs. With clean=true, deletes compiled output first to force a fresh recompile (slower but guaranteed).",
                 inputSchema: {
@@ -314,6 +327,25 @@ export class DebugTools implements ToolCategory {
                     return this.gameCommand("record_stop", undefined, args.timeout || 30000);
                 case "debug_wait_compile":
                     return this.waitCompile(args.timeout || 15000, args.clean ?? false);
+                case "execute_editor_script": {
+                    if (typeof args.code !== "string" || args.code.length === 0) {
+                        return err("execute_editor_script: 'code' is required and must be a non-empty string");
+                    }
+                    try {
+                        const result = await Editor.Message.request("scene", "execute-scene-script", {
+                            name: "cocos-creator-mcp",
+                            method: "executeEditorScript",
+                            args: [{
+                                code: args.code,
+                                timeoutMs: args.timeoutMs,
+                                returnLogs: args.returnLogs,
+                            }],
+                        });
+                        return ok(result);
+                    } catch (e: any) {
+                        return err(e.message || String(e));
+                    }
+                }
                 default:
                     return err(`Unknown tool: ${toolName}`);
             }

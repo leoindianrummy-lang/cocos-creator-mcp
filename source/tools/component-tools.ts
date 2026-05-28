@@ -576,6 +576,23 @@ export class ComponentTools implements ToolCategory {
         if (typeof value === "number") return { value, type: "Number" };
         if (typeof value === "boolean") return { value, type: "Boolean" };
 
+        // v2.0.0: {path: "db://..."} / {guid: "..."} オブジェクト形式 — Asset 参照を path/guid で渡す方法
+        if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+            if (typeof value.path === "string" && value.path.startsWith("db://")) {
+                const resolvedUuid = await this.resolveAssetUuidByPath(value.path);
+                if (!resolvedUuid) throw new Error(`Asset not found at path: ${value.path}`);
+                if (typeof value.type === "string") {
+                    return { type: value.type, value: { uuid: resolvedUuid } };
+                }
+                value = resolvedUuid; // 以降、文字列として型解決経路へ
+            } else if (typeof value.guid === "string") {
+                if (typeof value.type === "string") {
+                    return { type: value.type, value: { uuid: value.guid } };
+                }
+                value = value.guid;
+            }
+        }
+
         // オブジェクト形式 {uuid: "xxx", type: "cc.Node"} はそのまま
         // type 指定なしの {uuid: "xxx"} はプロパティの実際の型を解決するため文字列扱いに変換する
         if (value !== null && typeof value === "object" && typeof value.uuid === "string") {
@@ -595,6 +612,13 @@ export class ComponentTools implements ToolCategory {
             } else {
                 throw new Error(`Node not found at path: ${nodePath}`);
             }
+        }
+
+        // v2.0.0: db:// 始まりの文字列は Asset path として UUID に自動解決
+        if (typeof value === "string" && value.startsWith("db://")) {
+            const resolvedUuid = await this.resolveAssetUuidByPath(value);
+            if (!resolvedUuid) throw new Error(`Asset not found at path: ${value}`);
+            value = resolvedUuid;
         }
 
         // 文字列の場合: プロパティの型情報を取得して判定
@@ -659,6 +683,18 @@ export class ComponentTools implements ToolCategory {
             }
         }
         return current;
+    }
+
+    /**
+     * Asset path (db://...) から asset UUID を解決する。サブアセット指定 (@spriteFrame 等)
+     * もそのまま query-uuid に投げる。失敗時は null を返す。
+     */
+    private async resolveAssetUuidByPath(assetPath: string): Promise<string | null> {
+        try {
+            const uuid = await (Editor.Message.request as any)("asset-db", "query-uuid", assetPath);
+            if (typeof uuid === "string" && uuid.length > 0) return uuid;
+        } catch (_e) { /* fallthrough */ }
+        return null;
     }
 
     /**

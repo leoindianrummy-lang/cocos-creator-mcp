@@ -65,7 +65,7 @@ const ALL_TOOLS = [
     "builder_run_preview", "builder_stop_preview",
     "component_add", "component_auto_bind", "component_get_available", "component_get_components",
     "component_get_info", "component_query_enum", "component_remove", "component_set_property",
-    "debug_clear_console", "debug_execute_script", "debug_get_console_logs",
+    "debug_clear_console", "debug_execute_script", "debug_get_console_logs", "read_console",
     "debug_get_editor_info", "debug_get_extension_info", "debug_get_log_file_info",
     "debug_get_project_logs", "debug_list_extensions", "debug_list_messages",
     "debug_open_url", "debug_query_devices", "debug_search_project_logs", "debug_validate_scene",
@@ -1086,6 +1086,111 @@ async function testDialogPrevention() {
     }
 }
 
+async function testReadConsole() {
+    console.log("\n── read_console (v2.0.0) ──");
+
+    // 0. clean state — clear all sources first
+    await callTool("read_console", { action: "clear" });
+
+    // 1. inject a scene log marker via testLog (calls console.log internally in scene.ts)
+    const sceneMarker = `scene-marker-${Date.now()}`;
+    await callTool("debug_execute_script", { method: "testLog", args: [sceneMarker] });
+
+    // 2. inject 3 game log markers (log/warn/error) via POST /log
+    const ts = new Date().toISOString();
+    const gameMarkerLog = `game-marker-log-${Date.now()}`;
+    const gameMarkerWarn = `game-marker-warn-${Date.now() + 1}`;
+    const gameMarkerError = `game-marker-error-${Date.now() + 2}`;
+    await fetch(`${BASE}/log`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify([
+            { timestamp: ts, level: "log", message: gameMarkerLog },
+            { timestamp: ts, level: "warn", message: gameMarkerWarn },
+            { timestamp: ts, level: "error", message: gameMarkerError },
+        ]),
+    });
+    await new Promise((r) => setTimeout(r, 100)); // allow buffer flush
+
+    // 3. tools/list registration
+    const tools = await callMcp("tools/list", {});
+    const names = (tools.result?.tools || []).map((t) => t.name);
+    assert(names.includes("read_console"), "registered: read_console");
+
+    // 4. basic get
+    const all = await callTool("read_console", { count: 100 });
+    assert(all.success === true, "action=get success");
+    assert(Array.isArray(all.entries), "entries is an array");
+    assert(typeof all.counts === "object", "counts object present");
+
+    // 5. scene marker captured (real side effect verification)
+    const sceneHit = all.entries.some((e) => e.source === "scene" && String(e.message).includes(sceneMarker));
+    assert(sceneHit, `scene marker "${sceneMarker}" captured`);
+
+    // 6. game markers captured (log / warn / error)
+    const gLog = all.entries.some((e) => e.source === "game" && e.message === gameMarkerLog && e.type === "log");
+    const gWarn = all.entries.some((e) => e.source === "game" && e.message === gameMarkerWarn && e.type === "warn");
+    const gErr = all.entries.some((e) => e.source === "game" && e.message === gameMarkerError && e.type === "error");
+    assert(gLog, "game 'log' marker captured");
+    assert(gWarn, "game 'warn' marker captured");
+    assert(gErr, "game 'error' marker captured");
+
+    // 7. types filter — error only
+    const errOnly = await callTool("read_console", { count: 100, types: ["error"] });
+    assert(errOnly.entries.every((e) => e.type === "error"), "types=['error'] returns only error");
+    assert(errOnly.entries.some((e) => e.message === gameMarkerError), "error marker present under types filter");
+    assert(!errOnly.entries.some((e) => e.message === gameMarkerLog), "log marker excluded under types=['error']");
+
+    // 8. sources filter — game only
+    const gameOnly = await callTool("read_console", { count: 100, sources: ["game"] });
+    assert(gameOnly.entries.every((e) => e.source === "game"), "sources=['game'] returns only game");
+    assert(!gameOnly.entries.some((e) => e.source === "scene"), "no scene entries when sources=['game']");
+
+    // 9. count filter
+    const limited = await callTool("read_console", { count: 2 });
+    assert(limited.entries.length <= 2, `count=2 returns ≤ 2 entries (got ${limited.entries.length})`);
+
+    // 10. search filter (regex / substring)
+    const searched = await callTool("read_console", { count: 100, search: gameMarkerError });
+    assert(searched.entries.length >= 1, "search filter matches at least 1 entry");
+    assert(searched.entries.every((e) => String(e.message).includes(gameMarkerError)), "all search results contain the term");
+
+    // 11. since filter — future timestamp → no entries
+    const future = await callTool("read_console", { count: 100, since: "2099-01-01T00:00:00.000Z" });
+    assert(future.entries.length === 0, "since=future returns 0 entries");
+
+    // 12. stringified args (Claude Code MCP client edge case)
+    const stringified = await callTool("read_console", { count: 100, types: JSON.stringify(["error"]) });
+    assert(stringified.entries.every((e) => e.type === "error"), "stringified types array is parsed correctly");
+
+    // 13. includeStacktrace=false omits stacktrace field
+    assert(all.entries.every((e) => !("stacktrace" in e)), "includeStacktrace=false (default) omits stacktrace");
+
+    // 14. action='clear' targeted at game source — scene must survive
+    await callTool("read_console", { action: "clear", sources: ["game"] });
+    const afterGameClear = await callTool("read_console", { count: 100, sources: ["game"] });
+    assert(!afterGameClear.entries.some((e) => e.message === gameMarkerError), "game source cleared (error marker gone)");
+
+    const afterSceneCheck = await callTool("read_console", { count: 100, sources: ["scene"] });
+    const sceneSurvived = afterSceneCheck.entries.some((e) => String(e.message).includes(sceneMarker));
+    assert(sceneSurvived, "scene source not affected by sources=['game'] clear");
+
+    // 15. full clear
+    await callTool("read_console", { action: "clear" });
+    const afterFull = await callTool("read_console", { count: 100, sources: ["scene", "game"] });
+    const anyMarker = afterFull.entries.some((e) =>
+        String(e.message).includes(sceneMarker) ||
+        e.message === gameMarkerLog ||
+        e.message === gameMarkerWarn ||
+        e.message === gameMarkerError
+    );
+    assert(!anyMarker, "full action='clear' removes all injected markers");
+
+    // 16. unknown action returns error
+    const bad = await callTool("read_console", { action: "delete" });
+    assert(bad._rpcError || bad.error, "unknown action returns error");
+}
+
 async function testUncoveredTools() {
     console.log("\n── uncovered tools (minimum 1 call) ──");
     const hier = await callTool("scene_get_hierarchy");
@@ -1626,6 +1731,7 @@ async function main() {
     await testStringifiedArgs();
     await testSceneCreate();
     await testDialogPrevention();
+    await testReadConsole();
     await testUncoveredTools();
     await cleanupOrphanNodes();
 

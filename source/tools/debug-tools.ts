@@ -80,35 +80,27 @@ export class DebugTools implements ToolCategory {
                 },
             },
             {
-                name: "debug_list_extensions",
-                description: "List all installed extensions.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "debug_get_project_logs",
-                description: "Read recent project log entries from the log file.",
+                name: "debug_logs",
+                description: "Read or search the project log file (separate from read_console — this is the editor's persistent log). Actions: 'get' (last N lines), 'search' (regex pattern), 'info' (file size / path / mtime).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        lines: { type: "number", description: "Number of lines to read (default 100)" },
+                        action: { type: "string", description: "'get' (default) | 'search' | 'info'" },
+                        lines: { type: "number", description: "Number of lines to read (action=get, default 100)" },
+                        pattern: { type: "string", description: "Regex pattern (action=search)" },
                     },
                 },
             },
             {
-                name: "debug_search_project_logs",
-                description: "Search for a pattern in project logs.",
+                name: "debug_extension",
+                description: "Manage editor extensions (this MCP server itself + others). Actions: 'list' (all installed extensions), 'info' (details for a specific extension by name), 'reload' (reload this MCP extension — for new tool definitions a full CC restart is still required).",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        pattern: { type: "string", description: "Search pattern (regex supported)" },
+                        action: { type: "string", description: "'list' (default) | 'info' | 'reload'" },
+                        name: { type: "string", description: "Extension name (action=info)" },
                     },
-                    required: ["pattern"],
                 },
-            },
-            {
-                name: "debug_get_log_file_info",
-                description: "Get information about the project log file (size, path, last modified).",
-                inputSchema: { type: "object", properties: {} },
             },
             // ── 以下、既存MCP未対応のEditor API ──
             {
@@ -174,44 +166,21 @@ export class DebugTools implements ToolCategory {
                 inputSchema: { type: "object", properties: {} },
             },
             {
-                name: "debug_reload_extension",
-                description: "Reload the MCP extension itself. Use after npm run build to apply code changes without restarting CocosCreator. Response is sent before reload starts.",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
-                name: "debug_get_extension_info",
-                description: "Get detailed information about a specific extension.",
+                name: "debug_record",
+                description: "Record the game preview canvas to a video file (MP4/WebM via MediaRecorder on the game side). Actions: 'start' (configure fps/quality/format/savePath) and 'stop' (returns file path + size). Video saved to project's temp/recordings/rec_<datetime>.* by default.",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        name: { type: "string", description: "Extension name" },
-                    },
-                    required: ["name"],
-                },
-            },
-            {
-                name: "debug_record_start",
-                description: "Start recording the game preview canvas to a video file. Uses MediaRecorder on the game side. Bitrate is auto-calculated from canvas resolution × fps × quality coefficient unless videoBitsPerSecond is set explicitly.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        fps: { type: "number", description: "Frames per second (default: 30)" },
-                        quality: { type: "string", description: "'low'/'medium'/'high'/'ultra' (default: medium). Coefficients: 0.15/0.25/0.40/0.60" },
+                        action: { type: "string", description: "'start' | 'stop'" },
+                        fps: { type: "number", description: "Frames per second (action=start, default 30)" },
+                        quality: { type: "string", description: "'low'|'medium'|'high'|'ultra' (action=start, default medium). Coefficients 0.15/0.25/0.40/0.60." },
                         coefficient: { type: "number", description: "Custom bitrate coefficient (width × height × fps × coefficient). Overrides quality." },
                         videoBitsPerSecond: { type: "number", description: "Explicit bitrate in bps. Overrides quality-based calculation." },
-                        format: { type: "string", description: "'mp4' (default) or 'webm'. mp4 falls back to webm if not supported." },
+                        format: { type: "string", description: "'mp4' (default) | 'webm'. mp4 falls back to webm if unsupported." },
                         savePath: { type: "string", description: "Save directory (project-relative or absolute). Default: temp/recordings" },
+                        timeout: { type: "number", description: "Max wait time in ms for file upload (action=stop, default 30000)" },
                     },
-                },
-            },
-            {
-                name: "debug_record_stop",
-                description: "Stop recording started by debug_record_start. Returns the saved WebM file path and size. Video is saved to project's temp/recordings/rec_<datetime>.webm.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        timeout: { type: "number", description: "Max wait time in ms for file upload (default: 30000)" },
-                    },
+                    required: ["action"],
                 },
             },
             {
@@ -290,14 +259,10 @@ export class DebugTools implements ToolCategory {
                     // Clear game preview log buffer
                     clearGameLogs();
                     return ok({ success: true });
-                case "debug_list_extensions":
-                    return this.listExtensions();
-                case "debug_get_project_logs":
-                    return this.getProjectLogs(args.lines || 100);
-                case "debug_search_project_logs":
-                    return this.searchProjectLogs(args.pattern);
-                case "debug_get_log_file_info":
-                    return this.getLogFileInfo();
+                case "debug_logs":
+                    return this.handleLogsAction(args);
+                case "debug_extension":
+                    return this.handleExtensionAction(args);
                 case "debug_query_devices": {
                     const devices = await (Editor.Message.request as any)("device", "query").catch(() => []);
                     return ok({ success: true, devices });
@@ -313,18 +278,21 @@ export class DebugTools implements ToolCategory {
                     return this.handlePreview(args.action || "start", args.waitForReady, args.waitTimeout || 15000);
                 case "debug_clear_code_cache":
                     return this.clearCodeCache();
-                case "debug_reload_extension":
-                    return this.reloadExtension();
                 case "debug_validate_scene":
                     return this.validateScene();
-                case "debug_get_extension_info":
-                    return this.getExtensionInfo(args.name);
                 case "debug_batch_screenshot":
                     return this.batchScreenshot(args.pages, args.delay || 1000, args.maxWidth);
-                case "debug_record_start":
-                    return this.gameCommand("record_start", { fps: args.fps, quality: args.quality, coefficient: args.coefficient, videoBitsPerSecond: args.videoBitsPerSecond, format: args.format, savePath: args.savePath }, 5000);
-                case "debug_record_stop":
-                    return this.gameCommand("record_stop", undefined, args.timeout || 30000);
+                case "debug_record":
+                    if (args.action === "start") {
+                        return this.gameCommand("record_start", {
+                            fps: args.fps, quality: args.quality, coefficient: args.coefficient,
+                            videoBitsPerSecond: args.videoBitsPerSecond, format: args.format, savePath: args.savePath,
+                        }, 5000);
+                    }
+                    if (args.action === "stop") {
+                        return this.gameCommand("record_stop", undefined, args.timeout || 30000);
+                    }
+                    return err(`Unknown debug_record action: ${args.action}. Expected 'start' or 'stop'.`);
                 case "debug_wait_compile":
                     return this.waitCompile(args.timeout || 15000, args.clean ?? false);
                 case "execute_editor_script": {
@@ -587,6 +555,38 @@ export class DebugTools implements ToolCategory {
         };
 
         return ok({ success: true, action: "get", entries: result, counts });
+    }
+
+    /** debug_logs dispatcher (v2.0.0). */
+    private async handleLogsAction(args: Record<string, any>): Promise<ToolResult> {
+        const action = args.action || "get";
+        switch (action) {
+            case "get":
+                return this.getProjectLogs(args.lines || 100);
+            case "search":
+                if (!args.pattern) return err("debug_logs(search): 'pattern' is required");
+                return this.searchProjectLogs(args.pattern);
+            case "info":
+                return this.getLogFileInfo();
+            default:
+                return err(`Unknown debug_logs action: ${action}. Expected get / search / info.`);
+        }
+    }
+
+    /** debug_extension dispatcher (v2.0.0). */
+    private async handleExtensionAction(args: Record<string, any>): Promise<ToolResult> {
+        const action = args.action || "list";
+        switch (action) {
+            case "list":
+                return this.listExtensions();
+            case "info":
+                if (!args.name) return err("debug_extension(info): 'name' is required");
+                return this.getExtensionInfo(args.name);
+            case "reload":
+                return this.reloadExtension();
+            default:
+                return err(`Unknown debug_extension action: ${action}. Expected list / info / reload.`);
+        }
     }
 
     private async listExtensions(): Promise<ToolResult> {

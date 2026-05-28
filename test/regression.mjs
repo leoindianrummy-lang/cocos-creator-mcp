@@ -32,166 +32,14 @@ async function callMcp(method, params = {}) {
     return res.json();
 }
 
-// v2.0.0: 旧ツール名を新 category_action ツールへ自動変換するテスト側互換層。
-// 本番コード (拡張本体) には互換層を入れない方針 ([[feedback_cocos_mcp_v2_remove_unused]])。
-// テストロジックを温存しながら v2 ツールを叩くためのテスト専用 shim。
-const V1_TO_V2_TOOL_MAP = {
-    // node
-    "node_create": "node_manage:create",
-    "node_delete": "node_manage:delete",
-    "node_duplicate": "node_manage:duplicate",
-    "node_move": "node_manage:move",
-    // component
-    "component_add": "component_manage:add",
-    "component_remove": "component_manage:remove",
-    "component_get_available": "component_manage:available",
-    "component_query_enum": "component_manage:enum",
-    // scene main lifecycle
-    "scene_get_hierarchy": "scene_manage:hierarchy",
-    "scene_save": "scene_manage:save",
-    "scene_get_list": "scene_manage:list",
-    "scene_get_current": "scene_manage:current",
-    "scene_open": "scene_manage:open",
-    "scene_close": "scene_manage:close",
-    // preferences
-    "preferences_get": "preferences_manage:get",
-    "preferences_set": "preferences_manage:set",
-    "preferences_get_all": "preferences_manage:get_all",
-    "preferences_reset": "preferences_manage:reset",
-    // builder
-    "builder_open_panel": "builder_manage:open_panel",
-    "builder_get_settings": "builder_manage:get_settings",
-    "builder_query_tasks": "builder_manage:query_tasks",
-    "builder_run_preview": "builder_manage:run_preview",
-    "builder_stop_preview": "builder_manage:stop_preview",
-    // server
-    "server_query_ip_list": "server_status:ips",
-    "server_query_port": "server_status:port",
-    "server_get_status": "server_status:get",
-    "server_get_build_hash": "server_status:build_hash",
-    "server_check_connectivity": "server_status:connectivity",
-    "server_get_network_interfaces": "server_status:interfaces",
-    "server_check_code_sync": "server_status:code_sync",
-    // refimage
-    "refimage_add": "refimage_manage:add",
-    "refimage_remove": "refimage_manage:remove",
-    "refimage_clear_all": "refimage_manage:clear_all",
-    "refimage_switch": "refimage_manage:switch",
-    "refimage_refresh": "refimage_manage:refresh",
-    "refimage_set_position": "refimage_set:position",
-    "refimage_set_scale": "refimage_set:scale",
-    "refimage_set_opacity": "refimage_set:opacity",
-    "refimage_list": "refimage_query:list",
-    "refimage_query_config": "refimage_query:list",
-    "refimage_query_current": "refimage_query:current",
-    // view
-    "view_change_gizmo_tool": "view_gizmo:set_tool",
-    "view_query_gizmo_tool": "view_gizmo:get_tool",
-    "view_change_gizmo_pivot": "view_gizmo:set_pivot",
-    "view_query_gizmo_pivot": "view_gizmo:get_pivot",
-    "view_change_gizmo_coordinate": "view_gizmo:set_coordinate",
-    "view_query_gizmo_coordinate": "view_gizmo:get_coordinate",
-    "view_change_mode_2d_3d": "view_settings:set_mode",
-    "view_query_mode_2d_3d": "view_settings:get_mode",
-    "view_set_grid_visible": "view_settings:set_grid",
-    "view_query_grid_visible": "view_settings:get_grid",
-    "view_set_icon_gizmo_3d": "view_settings:set_icon3d",
-    "view_query_icon_gizmo_3d": "view_settings:get_icon3d",
-    "view_set_icon_gizmo_size": "view_settings:set_icon_size",
-    "view_query_icon_gizmo_size": "view_settings:get_icon_size",
-    "view_get_status": "view_settings:status",
-    "view_reset": "view_settings:reset",
-    "view_focus_on_node": "view_camera:focus_on_nodes",
-    "view_align_with_view": "view_camera:align_with_view",
-    "view_align_view_with_node": "view_camera:align_view_with_node",
-    // asset
-    "asset_create": "asset_manage:create",
-    "asset_delete": "asset_manage:delete",
-    "asset_move": "asset_manage:move",
-    "asset_copy": "asset_manage:copy",
-    "asset_save": "asset_manage:save",
-    "asset_reimport": "asset_manage:reimport",
-    "asset_import": "asset_manage:import",
-    "asset_save_meta": "asset_manage:save_meta",
-    "asset_open_external": "asset_manage:open_external",
-    "asset_query_path": "asset_query:path",
-    "asset_query_uuid": "asset_query:uuid",
-    "asset_query_url": "asset_query:url",
-    "asset_get_details": "asset_query:details",
-    "asset_get_dependencies": "asset_query:dependencies",
-    "asset_query_users": "asset_query:users",
-    "asset_query_missing": "asset_query:missing",
-    "asset_query_ready": "asset_query:ready",
-    "asset_generate_available_url": "asset_query:generate_url",
-    // debug 集約
-    "debug_get_project_logs": "debug_logs:get",
-    "debug_search_project_logs": "debug_logs:search",
-    "debug_get_log_file_info": "debug_logs:info",
-    "debug_list_extensions": "debug_extension:list",
-    "debug_get_extension_info": "debug_extension:info",
-    "debug_reload_extension": "debug_extension:reload",
-    "debug_record_start": "debug_record:start",
-    "debug_record_stop": "debug_record:stop",
-    // scene-advanced 集約 (Phase 2-r1)
-    "scene_copy_node": "scene_clipboard:copy",
-    "scene_paste_node": "scene_clipboard:paste",
-    "scene_cut_node": "scene_clipboard:cut",
-    "scene_snapshot": "scene_undo:snapshot",
-    "scene_snapshot_abort": "scene_undo:snapshot_abort",
-    "scene_begin_undo": "scene_undo:begin",
-    "scene_end_undo": "scene_undo:end",
-    "scene_cancel_undo": "scene_undo:cancel",
-    "scene_move_array_element": "scene_array:move",
-    "scene_remove_array_element": "scene_array:remove",
-    "scene_reset_node_transform": "scene_reset:transform",
-    "scene_reset_property": "scene_reset:property",
-    "scene_reset_component": "scene_reset:component",
-    "scene_restore_prefab": "scene_reset:restore_prefab",
-    // prefab edit 集約
-    "prefab_open": "prefab_edit:open",
-    "prefab_close": "prefab_edit:close",
-};
-
-// 旧ツールで使われていた param 名 → 新ツールの param 名
-const V1_PARAM_REMAP = {
-    "node_move": { parentUuid: "parent" },
-    "debug_search_project_logs": { keyword: "pattern" },
-    // 旧テストには scene_open に uuid を渡す箇所が残っていたが、v1 でも scene が正規。
-    // scene_manage(open) で scene パラメータに揃える
-    "scene_open": { uuid: "scene" },
-};
 
 async function callTool(name, args = {}) {
-    let toolName = name;
-    let argsToSend = args;
-    const mapped = V1_TO_V2_TOOL_MAP[name];
-    if (mapped) {
-        const [newName, action] = mapped.split(":");
-        toolName = newName;
-        argsToSend = { ...args, action };
-        const remap = V1_PARAM_REMAP[name];
-        if (remap) {
-            for (const [oldKey, newKey] of Object.entries(remap)) {
-                if (oldKey in argsToSend) {
-                    argsToSend[newKey] = argsToSend[oldKey];
-                    if (oldKey !== newKey) delete argsToSend[oldKey];
-                }
-            }
-        }
-        // 特殊: view_focus_on_node は v1 で uuid (単数) または uuids (配列) 両受け
-        // 新 view_camera(focus_on_nodes) は uuids (配列) 必須
-        if (name === "view_focus_on_node") {
-            if (argsToSend.uuid && !argsToSend.uuids) {
-                argsToSend.uuids = [argsToSend.uuid];
-            }
-            delete argsToSend.uuid;
-        }
-    }
-    const res = await callMcp("tools/call", { name: toolName, arguments: argsToSend });
+    const res = await callMcp("tools/call", { name, arguments: args });
     if (res.error) return { _rpcError: res.error };
     const text = res.result?.content?.[0]?.text;
     return text ? JSON.parse(text) : res.result;
 }
+
 
 function assert(condition, label) {
     if (condition) {
@@ -411,14 +259,14 @@ async function testPrefabTools() {
 
         const inst = await callTool("prefab_instantiate", { prefabUuid: prefab.result, parent: canvasUuid });
         assert(inst.success === true, "instantiate");
-        if (inst.nodeUuid) await callTool("node_delete", { uuid: inst.nodeUuid });
+        if (inst.nodeUuid) await callTool("node_manage", { action: "delete", uuid: inst.nodeUuid });
     }
 
-    await callTool("node_delete", { uuid });
+    await callTool("node_manage", { action: "delete", uuid });
 
     // テスト用Prefabアセットを削除
     if (testPrefabPath) {
-        await callTool("asset_delete", { path: testPrefabPath });
+        await callTool("asset_manage", { action: "delete", path: testPrefabPath });
     }
 }
 
@@ -447,21 +295,21 @@ async function testAssetTools() {
     const sceneUuid = scenes.assets?.[0]?.uuid;
 
     if (scenePath) {
-        const quuid = await callTool("asset_query_uuid", { path: scenePath });
+        const quuid = await callTool("asset_query", { action: "uuid", path: scenePath });
         assert(quuid.success === true, "query_uuid");
 
         const uuid = quuid.uuid || sceneUuid;
         if (uuid) {
-            const qpath = await callTool("asset_query_path", { uuid });
+            const qpath = await callTool("asset_query", { action: "path", uuid });
             assert(qpath.success === true, "query_path");
 
-            const qurl = await callTool("asset_query_url", { uuid });
+            const qurl = await callTool("asset_query", { action: "url", uuid });
             assert(qurl.success === true, "query_url");
 
-            const details = await callTool("asset_get_details", { uuid });
+            const details = await callTool("asset_query", { action: "details", uuid });
             assert(details.success === true, "get_details");
 
-            const deps = await callTool("asset_get_dependencies", { uuid });
+            const deps = await callTool("asset_query", { action: "dependencies", uuid });
             assert(deps.success === true || !deps._rpcError, "get_dependencies");
         }
     } else {
@@ -481,34 +329,34 @@ async function testSceneAdvancedTools() {
     assert(classes.success === true || !classes._rpcError, "query_classes");
 
     // reset_node_transform — create, transform, reset, verify
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
-    const n = await callTool("node_create", { name: "ResetTest", parent: canvasUuid });
+    const n = await callTool("node_manage", { action: "create", name: "ResetTest", parent: canvasUuid });
     await callTool("node_set_transform", { uuid: n.uuid, position: { x: 99, y: 99, z: 0 } });
-    await callTool("scene_reset_node_transform", { uuid: n.uuid });
+    await callTool("scene_reset", { action: "transform", uuid: n.uuid });
     const info = await callTool("node_get_info", { uuid: n.uuid });
     assert(info.data?.position?.x === 0, "reset_node_transform");
-    await callTool("node_delete", { uuid: n.uuid });
+    await callTool("node_manage", { action: "delete", uuid: n.uuid });
 }
 
 async function testSceneViewTools() {
     console.log("\n── scene view tools ──");
-    const status = await callTool("view_get_status");
+    const status = await callTool("view_settings", { action: "status" });
     assert(status.success === true, "get_status");
 
-    const tool = await callTool("view_query_gizmo_tool");
+    const tool = await callTool("view_gizmo", { action: "get_tool" });
     assert(tool.success === true || !tool._rpcError, "query_gizmo_tool");
 
-    const pivot = await callTool("view_query_gizmo_pivot");
+    const pivot = await callTool("view_gizmo", { action: "get_pivot" });
     assert(pivot.success === true || !pivot._rpcError, "query_gizmo_pivot");
 
-    const coord = await callTool("view_query_gizmo_coordinate");
+    const coord = await callTool("view_gizmo", { action: "get_coordinate" });
     assert(coord.success === true || !coord._rpcError, "query_gizmo_coordinate");
 
-    const grid = await callTool("view_query_grid_visible");
+    const grid = await callTool("view_settings", { action: "get_grid" });
     assert(grid.success === true || !grid._rpcError, "query_grid_visible");
 
-    const mode = await callTool("view_query_mode_2d_3d");
+    const mode = await callTool("view_settings", { action: "get_mode" });
     assert(mode.success === true || !mode._rpcError, "query_mode_2d_3d");
 }
 
@@ -530,33 +378,33 @@ async function testDebugTools() {
     const gameLogs = await callTool("debug_get_console_logs", { count: 10, source: "game" });
     assert(gameLogs.success === true, "get_console_logs source=game accepted");
 
-    const exts = await callTool("debug_list_extensions");
+    const exts = await callTool("debug_extension", { action: "list" });
     assert(exts.success === true, "list_extensions");
 }
 
 async function testPreferencesTools() {
     console.log("\n── preferences tools ──");
-    const all = await callTool("preferences_get_all", { protocol: "general" });
+    const all = await callTool("preferences_manage", { action: "get_all", protocol: "general" });
     assert(all.success === true || !all._rpcError, "get_all");
 }
 
 async function testServerTools() {
     console.log("\n── server tools ──");
-    const status = await callTool("server_get_status");
+    const status = await callTool("server_status", { action: "get" });
     assert(status.success === true, "get_status");
-    const buildInfo = await callTool("server_get_build_hash");
+    const buildInfo = await callTool("server_status", { action: "build_hash" });
     assert(!!buildInfo.buildHash && buildInfo.buildHash !== "__BUILD_HASH__", `buildHash: ${buildInfo.buildHash}`);
 
-    const port = await callTool("server_query_port");
+    const port = await callTool("server_status", { action: "port" });
     assert(port.success === true, "query_port");
 }
 
 async function testBuilderTools() {
     console.log("\n── builder tools ──");
-    const settings = await callTool("builder_get_settings");
+    const settings = await callTool("builder_manage", { action: "get_settings" });
     assert(settings.success === true || !settings._rpcError, "get_settings");
 
-    const tasks = await callTool("builder_query_tasks");
+    const tasks = await callTool("builder_manage", { action: "query_tasks" });
     assert(tasks.success === true || !tasks._rpcError, "query_tasks");
 }
 
@@ -565,7 +413,7 @@ async function testNewSceneAdvancedTools() {
     const ready = await callTool("scene_query_ready");
     assert(ready.success === true || !ready._rpcError, "query_ready");
 
-    const current = await callTool("scene_get_current");
+    const current = await callTool("scene_manage", { action: "current" });
     assert(current.success === true || !current._rpcError, "get_current");
 
     const hasScript = await callTool("scene_query_component_has_script", { name: "cc.Label" });
@@ -574,16 +422,16 @@ async function testNewSceneAdvancedTools() {
 
 async function testNewViewTools() {
     console.log("\n── new scene view tools ──");
-    const icon3d = await callTool("view_query_icon_gizmo_3d");
+    const icon3d = await callTool("view_settings", { action: "get_icon3d" });
     assert(icon3d.success === true || !icon3d._rpcError, "query_icon_gizmo_3d");
 
-    const iconSize = await callTool("view_query_icon_gizmo_size");
+    const iconSize = await callTool("view_settings", { action: "get_icon_size" });
     assert(iconSize.success === true || !iconSize._rpcError, "query_icon_gizmo_size");
 }
 
 async function testComponentAdvanced() {
     console.log("\n── component advanced tools ──");
-    const available = await callTool("component_get_available");
+    const available = await callTool("component_manage", { action: "available" });
     assert(available.success === true || !available._rpcError, "get_available");
 }
 
@@ -598,43 +446,43 @@ async function testProjectAdvanced() {
 
 async function testReferenceImageTools() {
     console.log("\n── reference image tools ──");
-    const config = await callTool("refimage_query_config");
+    const config = await callTool("refimage_query", { action: "list" });
     assert(config.success === true || !config._rpcError, "query_config");
 
-    const list = await callTool("refimage_list");
+    const list = await callTool("refimage_query", { action: "list" });
     assert(list.success === true || !list._rpcError, "list");
 
-    const current = await callTool("refimage_query_current");
+    const current = await callTool("refimage_query", { action: "current" });
     assert(current.success === true || !current._rpcError, "query_current");
 }
 
 async function testV13Regressions() {
     console.log("\n── v1.3 regressions (set-property / prefab guard / scene_save) ──");
 
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
 
     // 1. scene_save — ダイアログなしで成功するか
-    const save = await callTool("scene_save");
+    const save = await callTool("scene_manage", { action: "save" });
     assert(save.success === true, "scene_save no dialog");
 
     // 2. prefab_create 上書きガード — テスト用Prefabを作って上書きを試みる
-    const guardNode = await callTool("node_create", { name: "GuardTest", parent: canvasUuid });
+    const guardNode = await callTool("node_manage", { action: "create", name: "GuardTest", parent: canvasUuid });
     const guardPath = `db://assets/test/GuardTest_${Date.now()}.prefab`;
     const guardPrefab = await callTool("prefab_create", { uuid: guardNode.uuid, path: guardPath });
     assert(guardPrefab.success === true, "prefab_create for guard test");
     // 同じパスに再作成 → エラーになるはず
     const guardResult = await callTool("prefab_create", { uuid: guardNode.uuid, path: guardPath });
     assert(!!guardResult.error || !!guardResult._rpcError, "prefab_create overwrite guard");
-    await callTool("node_delete", { uuid: guardNode.uuid });
-    await callTool("asset_delete", { path: guardPath });
+    await callTool("node_manage", { action: "delete", uuid: guardNode.uuid });
+    await callTool("asset_manage", { action: "delete", path: guardPath });
 
     // 3. set-property + prefab_update — テスト用Prefabを自作してテスト
-    const prefabNode = await callTool("node_create", { name: "UpdateTestNode", parent: canvasUuid, components: ["cc.Label"] });
+    const prefabNode = await callTool("node_manage", { action: "create", name: "UpdateTestNode", parent: canvasUuid, components: ["cc.Label"] });
     await callTool("component_set_property", { uuid: prefabNode.uuid, componentType: "cc.Label", property: "string", value: "original" });
     const testPrefabPath = `db://assets/test/UpdateTest_${Date.now()}.prefab`;
     const created = await callTool("prefab_create", { uuid: prefabNode.uuid, path: testPrefabPath });
-    await callTool("node_delete", { uuid: prefabNode.uuid });
+    await callTool("node_manage", { action: "delete", uuid: prefabNode.uuid });
 
     if (created.result) {
         // instantiate → set-property → prefab_update
@@ -649,27 +497,27 @@ async function testV13Regressions() {
             const updated = await callTool("prefab_update", { uuid: instUuid });
             assert(updated.success === true, "prefab_update after set-property");
 
-            await callTool("node_delete", { uuid: instUuid });
+            await callTool("node_manage", { action: "delete", uuid: instUuid });
         }
-        await callTool("asset_delete", { path: testPrefabPath });
+        await callTool("asset_manage", { action: "delete", path: testPrefabPath });
     } else {
         skip("set-property + prefab_update (prefab_create failed)");
     }
 
     // 4. パラメータエイリアス — component でも componentType でも動くか
-    const aliasNode = await callTool("node_create", { name: "AliasTest", parent: canvasUuid, components: ["cc.Label"] });
+    const aliasNode = await callTool("node_manage", { action: "create", name: "AliasTest", parent: canvasUuid, components: ["cc.Label"] });
     const aliasSet = await callTool("component_set_property", {
         uuid: aliasNode.uuid, component: "cc.Label", property: "string", value: "alias"
     });
     assert(aliasSet.success === true, "param alias: component → componentType");
-    await callTool("node_delete", { uuid: aliasNode.uuid });
+    await callTool("node_manage", { action: "delete", uuid: aliasNode.uuid });
 }
 
 async function testNewEditorAPIs() {
     console.log("\n── new Editor APIs (beyond existing MCP) ──");
 
     // scene_query_node
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
     if (canvasUuid) {
         const nodeDump = await callTool("scene_query_node", { uuid: canvasUuid });
@@ -677,19 +525,19 @@ async function testNewEditorAPIs() {
     }
 
     // asset_query_ready
-    const ready = await callTool("asset_query_ready");
+    const ready = await callTool("asset_query", { action: "ready" });
     assert(ready.success === true || !ready._rpcError, "asset_query_ready");
 
     // asset_generate_available_url
-    const avail = await callTool("asset_generate_available_url", { url: "db://assets/test/TestGenerated.prefab" });
+    const avail = await callTool("asset_query", { action: "generate_url", url: "db://assets/test/TestGenerated.prefab" });
     assert(avail.success === true || !avail._rpcError, "asset_generate_available_url");
 
     // server_check_connectivity
-    const conn = await callTool("server_check_connectivity");
+    const conn = await callTool("server_status", { action: "connectivity" });
     assert(conn.success === true, "server_check_connectivity");
 
     // server_get_network_interfaces
-    const net = await callTool("server_get_network_interfaces");
+    const net = await callTool("server_status", { action: "interfaces" });
     assert(net.success === true, "server_get_network_interfaces");
 
     // node_detect_type
@@ -700,7 +548,7 @@ async function testNewEditorAPIs() {
     }
 
     // debug_get_log_file_info
-    const logInfo = await callTool("debug_get_log_file_info");
+    const logInfo = await callTool("debug_logs", { action: "info" });
     assert(logInfo.success === true, "debug_get_log_file_info");
 
     // debug_validate_scene
@@ -708,7 +556,7 @@ async function testNewEditorAPIs() {
     assert(valid.success === true, "debug_validate_scene");
 
     // prefab_validate (use MainScene UUID)
-    const scenes = await callTool("scene_get_list");
+    const scenes = await callTool("scene_manage", { action: "list" });
     if (scenes.scenes?.length > 0) {
         const pv = await callTool("prefab_validate", { uuid: scenes.scenes[0].uuid });
         assert(pv.success === true || !pv._rpcError, "prefab_validate");
@@ -718,11 +566,11 @@ async function testNewEditorAPIs() {
 async function testV15NewTools() {
     console.log("\n── v1.5 new tools (create_and_replace / batch set_property / prefab_open) ──");
 
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
 
     // 1. prefab_create_and_replace
-    const node = await callTool("node_create", { name: "ReplaceTest", parent: canvasUuid, components: ["cc.Label"] });
+    const node = await callTool("node_manage", { action: "create", name: "ReplaceTest", parent: canvasUuid, components: ["cc.Label"] });
     await callTool("component_set_property", { uuid: node.uuid, componentType: "cc.Label", property: "string", value: "replace_test" });
     const replacePath = `db://assets/test/ReplaceTest_${Date.now()}.prefab`;
     const replaced = await callTool("prefab_create_and_replace", { uuid: node.uuid, path: replacePath });
@@ -739,12 +587,12 @@ async function testV15NewTools() {
         const newNode = await callTool("node_get_info", { uuid: replaced.newInstanceUuid });
         // Prefabインスタンスの名前はPrefabアセット名になる（CocosCreator仕様）
         assert(newNode.data?.name != null, `new instance exists (name: ${newNode.data?.name})`);
-        await callTool("node_delete", { uuid: replaced.newInstanceUuid });
+        await callTool("node_manage", { action: "delete", uuid: replaced.newInstanceUuid });
     }
-    await callTool("asset_delete", { path: replacePath });
+    await callTool("asset_manage", { action: "delete", path: replacePath });
 
     // 2. component_set_property batch mode
-    const batchNode = await callTool("node_create", { name: "BatchTest", parent: canvasUuid, components: ["cc.Label"] });
+    const batchNode = await callTool("node_manage", { action: "create", name: "BatchTest", parent: canvasUuid, components: ["cc.Label"] });
     const batchResult = await callTool("component_set_property", {
         uuid: batchNode.uuid,
         componentType: "cc.Label",
@@ -755,10 +603,10 @@ async function testV15NewTools() {
     });
     assert(batchResult.success === true, "batch set_property success");
     assert(batchResult.results?.length === 2, "batch set_property 2 results");
-    await callTool("node_delete", { uuid: batchNode.uuid });
+    await callTool("node_manage", { action: "delete", uuid: batchNode.uuid });
 
     // 3. prefab_create_and_replace overwrite guard
-    const guardNode2 = await callTool("node_create", { name: "ReplaceGuard", parent: canvasUuid });
+    const guardNode2 = await callTool("node_manage", { action: "create", name: "ReplaceGuard", parent: canvasUuid });
     const guardPath2 = `db://assets/test/ReplaceGuard_${Date.now()}.prefab`;
     // First create (should succeed via normal create)
     const firstPrefab = await callTool("prefab_create", { uuid: guardNode2.uuid, path: guardPath2 });
@@ -766,15 +614,15 @@ async function testV15NewTools() {
     // Try create_and_replace with same path (should fail)
     const guardReplace = await callTool("prefab_create_and_replace", { uuid: guardNode2.uuid, path: guardPath2 });
     assert(!!guardReplace.error || !!guardReplace._rpcError, "create_and_replace overwrite guard");
-    await callTool("node_delete", { uuid: guardNode2.uuid });
-    await callTool("asset_delete", { path: guardPath2 });
+    await callTool("node_manage", { action: "delete", uuid: guardNode2.uuid });
+    await callTool("asset_manage", { action: "delete", path: guardPath2 });
 }
 
 async function testV16NewTools() {
     console.log("\n── v1.6 new tools (batch_screenshot / widget / source filter) ──");
 
     // 1. node_create_tree with widget
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
     if (canvasUuid) {
         const tree = await callTool("node_create_tree", {
@@ -787,7 +635,7 @@ async function testV16NewTools() {
         });
         assert(tree.success === true, "create_tree with widget");
         if (tree.data?.uuid) {
-            await callTool("node_delete", { uuid: tree.data.uuid });
+            await callTool("node_manage", { action: "delete", uuid: tree.data.uuid });
         }
     } else {
         skip("widget test (no Canvas)");
@@ -800,9 +648,9 @@ async function testV16NewTools() {
 
     // 3. component_query_enum
     if (canvasUuid) {
-        const enumNode = await callTool("node_create", { name: "EnumTest", parent: canvasUuid, components: ["cc.Layout"] });
+        const enumNode = await callTool("node_manage", { action: "create", name: "EnumTest", parent: canvasUuid, components: ["cc.Layout"] });
         if (enumNode.uuid) {
-            const enumResult = await callTool("component_query_enum", { uuid: enumNode.uuid, componentType: "cc.Layout", property: "resizeMode" });
+            const enumResult = await callTool("component_manage", { action: "enum", uuid: enumNode.uuid, componentType: "cc.Layout", property: "resizeMode" });
             assert(enumResult.success === true, "query_enum success");
             assert(Array.isArray(enumResult.enumList), "query_enum returns enumList");
             if (enumResult.enumList) {
@@ -810,12 +658,12 @@ async function testV16NewTools() {
                 assert(names.includes("CONTAINER"), "resizeMode has CONTAINER");
                 assert(names.includes("CHILDREN"), "resizeMode has CHILDREN");
             }
-            await callTool("node_delete", { uuid: enumNode.uuid });
+            await callTool("node_manage", { action: "delete", uuid: enumNode.uuid });
         }
     }
 
     // 4. server_check_code_sync
-    const syncResult = await callTool("server_check_code_sync");
+    const syncResult = await callTool("server_status", { action: "code_sync" });
     assert(syncResult.success === true, "check_code_sync success");
     assert(syncResult.runtimeHash != null, `runtimeHash: ${syncResult.runtimeHash}`);
     assert(syncResult.diskHash != null, `diskHash: ${syncResult.diskHash}`);
@@ -841,7 +689,7 @@ async function testV18NewTools() {
 async function testV111NewTools() {
     console.log("\n── v1.11 new tools (auto_bind / create_from_spec / wait_compile) ──");
 
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
     if (!canvasUuid) { skip("v1.11 tests (no Canvas)"); return; }
 
@@ -870,7 +718,7 @@ async function testV111NewTools() {
             // UITransform にはバインド対象の @property がないので boundCount=0
             assert(bindResult.success === true, "auto_bind returns success");
             assert(bindResult.boundCount === 0, "auto_bind: no bindable props on UITransform");
-            await callTool("node_delete", { uuid: tree.data.uuid });
+            await callTool("node_manage", { action: "delete", uuid: tree.data.uuid });
         }
     }
 
@@ -905,16 +753,16 @@ async function testV111NewTools() {
         }
 
         // クリーンアップ
-        await callTool("asset_delete", { path: specPath });
+        await callTool("asset_manage", { action: "delete", path: specPath });
     }
 
     // 3. prefab_create_from_spec — 上書きガード
     {
         // まず通常の Prefab を作成
-        const guardNode = await callTool("node_create", { name: "GuardNode", parent: canvasUuid });
+        const guardNode = await callTool("node_manage", { action: "create", name: "GuardNode", parent: canvasUuid });
         const guardPath = `db://assets/test/SpecGuard_${Date.now()}.prefab`;
         await callTool("prefab_create", { uuid: guardNode.uuid, path: guardPath });
-        await callTool("node_delete", { uuid: guardNode.uuid });
+        await callTool("node_manage", { action: "delete", uuid: guardNode.uuid });
 
         // 同じパスに create_from_spec → エラーになるべき
         const dupResult = await callTool("prefab_create_from_spec", {
@@ -923,7 +771,7 @@ async function testV111NewTools() {
         });
         assert(!!dupResult.error || !!dupResult._rpcError, "create_from_spec overwrite guard");
 
-        await callTool("asset_delete", { path: guardPath });
+        await callTool("asset_manage", { action: "delete", path: guardPath });
     }
 
     // 4. debug_wait_compile — ツール登録確認
@@ -936,7 +784,7 @@ async function testV111NewTools() {
 
 async function testPrefabEfficiency() {
     console.log("\n── prefab efficiency (nodeName / screenshot / node_set_layout) ──");
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
     if (!canvasUuid) { skip("prefab efficiency tests (no Canvas)"); return; }
 
@@ -946,7 +794,7 @@ async function testPrefabEfficiency() {
     assert(!!layoutTool, "node_set_layout registered");
 
     // 2. nodeName でノード作成→プロパティ設定
-    const created = await callTool("node_create", { name: "EfficiencyTestNode", parent: canvasUuid, components: ["cc.Label"] });
+    const created = await callTool("node_manage", { action: "create", name: "EfficiencyTestNode", parent: canvasUuid, components: ["cc.Label"] });
     const uuid = created.uuid;
 
     // 2a. component_set_property with nodeName (uuid なし)
@@ -999,24 +847,24 @@ async function testPrefabEfficiency() {
     assert(!!layoutSS.screenshot?.path || !!layoutSS.screenshotError, "node_set_layout screenshot result");
 
     // Cleanup
-    await callTool("node_delete", { uuid });
+    await callTool("node_manage", { action: "delete", uuid });
 }
 
 async function testStringifiedArgs() {
     console.log("\n── stringified args prevention ──");
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
     if (!canvasUuid) { skip("stringified args (no Canvas)"); return; }
 
     // 1. node_set_property — value がJSON文字列で届いても動くか
-    const n1 = await callTool("node_create", { name: "StrArgTest", parent: canvasUuid });
+    const n1 = await callTool("node_manage", { action: "create", name: "StrArgTest", parent: canvasUuid });
     const setPosStr = await callTool("node_set_property", {
         uuid: n1.uuid, property: "position", value: JSON.stringify({ x: 42, y: 0, z: 0 }),
     });
     assert(setPosStr.success === true, "node_set_property with stringified value");
     const info1 = await callTool("node_get_info", { uuid: n1.uuid });
     assert(info1.data?.position?.x === 42, "position.x == 42 after stringified set");
-    await callTool("node_delete", { uuid: n1.uuid });
+    await callTool("node_manage", { action: "delete", uuid: n1.uuid });
 
     // 2. node_create_tree — spec がJSON文字列で届いても動くか
     const treeStr = await callTool("node_create_tree", {
@@ -1024,10 +872,10 @@ async function testStringifiedArgs() {
         spec: JSON.stringify({ name: "StrTreeTest", components: ["cc.UITransform"] }),
     });
     assert(treeStr.success === true, "node_create_tree with stringified spec");
-    if (treeStr.data?.uuid) await callTool("node_delete", { uuid: treeStr.data.uuid });
+    if (treeStr.data?.uuid) await callTool("node_manage", { action: "delete", uuid: treeStr.data.uuid });
 
     // 3. component_set_property — value がJSON文字列で届いても動くか
-    const n3 = await callTool("node_create", { name: "CompStrTest", parent: canvasUuid, components: ["cc.UITransform"] });
+    const n3 = await callTool("node_manage", { action: "create", name: "CompStrTest", parent: canvasUuid, components: ["cc.UITransform"] });
     const setCS = await callTool("component_set_property", {
         uuid: n3.uuid, componentType: "cc.UITransform",
         property: "contentSize", value: JSON.stringify({ width: 100, height: 200 }),
@@ -1040,14 +888,14 @@ async function testStringifiedArgs() {
         properties: JSON.stringify([{ property: "contentSize", value: { width: 300, height: 400 } }]),
     });
     assert(setBatch.success === true, "component_set_property batch with stringified properties");
-    await callTool("node_delete", { uuid: n3.uuid });
+    await callTool("node_manage", { action: "delete", uuid: n3.uuid });
 }
 
 async function testSceneCreate() {
     console.log("\n── scene_create (asset-db fallback) ──");
 
     // 元のシーンを記憶
-    const origScene = await callTool("scene_get_current");
+    const origScene = await callTool("scene_manage", { action: "current" });
     const origUuid = origScene.uuid || origScene.data?.uuid;
 
     // scene-2d は dirty untitled 扱いになり preflight でエラーが出うるので force:true でバイパス
@@ -1058,9 +906,9 @@ async function testSceneCreate() {
 
     // 元のシーンに戻してクリーンアップ
     if (result.success && origUuid) {
-        await callTool("scene_open", { uuid: origUuid, force: true });
+        await callTool("scene_manage", { action: "open", scene: origUuid, force: true });
         await new Promise(r => setTimeout(r, 1000));
-        await callTool("asset_delete", { path: testPath });
+        await callTool("asset_manage", { action: "delete", path: testPath });
     }
 
     // 2. path なしでの作成（scene:new-scene または自動 fallback）
@@ -1069,11 +917,11 @@ async function testSceneCreate() {
 
     // 元のシーンに戻してクリーンアップ
     if (result2.success && origUuid) {
-        await callTool("scene_open", { uuid: origUuid, force: true });
+        await callTool("scene_manage", { action: "open", scene: origUuid, force: true });
         await new Promise(r => setTimeout(r, 1000));
         // fallback で作成された場合はファイルを削除
         if (result2.path) {
-            await callTool("asset_delete", { path: result2.path });
+            await callTool("asset_manage", { action: "delete", path: result2.path });
         }
     }
 }
@@ -1086,18 +934,18 @@ async function testDialogPrevention() {
     // 前提: 保存済みシーン (_regression.scene) 上で実行する必要がある。
     // 他のテストが scene-2d 等に切り替えている可能性があるので冒頭で _regression に戻す。
     // _regression に戻せなかった場合は何も副作用を残さず早期 return する。
-    const regInfoPre = await callTool("asset_query_uuid", { path: TEST_SCENE_PATH });
+    const regInfoPre = await callTool("asset_query", { action: "uuid", path: TEST_SCENE_PATH });
     const regUuidPre = regInfoPre.uuid || regInfoPre.data?.uuid;
     if (!regUuidPre) {
         skip("dialog prevention: _regression.scene not found");
         return;
     }
 
-    await callTool("scene_open", { scene: regUuidPre });
+    await callTool("scene_manage", { action: "open", scene: regUuidPre });
     const switchDeadline = Date.now() + 5000;
     let switchedToRegression = false;
     while (Date.now() < switchDeadline) {
-        const now = await callTool("scene_get_current");
+        const now = await callTool("scene_manage", { action: "current" });
         if ((now.sceneName || now.data?.sceneName) === "_regression") {
             switchedToRegression = true;
             break;
@@ -1109,7 +957,7 @@ async function testDialogPrevention() {
         return;
     }
 
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
     if (!canvasUuid) {
         skip("dialog prevention: Canvas not found");
@@ -1117,31 +965,31 @@ async function testDialogPrevention() {
     }
 
     // 1. 現在のシーンを dirty にする
-    const n = await callTool("node_create", { name: `DialogGuardTest_${Date.now()}`, parent: canvasUuid });
+    const n = await callTool("node_manage", { action: "create", name: `DialogGuardTest_${Date.now()}`, parent: canvasUuid });
     assert(n.success === true, "setup: created temp node (scene becomes dirty)");
     const tempNodeUuid = n.uuid || n.data?.uuid;
 
     // 2. 現在のシーンが保存済みであることを確認
-    const cur = await callTool("scene_get_current");
+    const cur = await callTool("scene_manage", { action: "current" });
     const curName = cur.sceneName || cur.data?.sceneName || "";
     const isSaved = !["scene-2d", "scene-3d", "Untitled", "NewScene", ""].includes(curName);
     if (!isSaved) {
         // setup が正しく機能していれば到達しないはず
         console.log(`  ⚠️  current scene "${curName}" is untitled, skipping (setup issue?)`);
-        if (tempNodeUuid) await callTool("node_delete", { uuid: tempNodeUuid });
+        if (tempNodeUuid) await callTool("node_manage", { action: "delete", uuid: tempNodeUuid });
         return;
     }
 
     // 3. 別シーン (MainScene) に切替 — 保存済みシーンなので preflight が auto-save して成功するはず
-    const mainInfo = await callTool("asset_query_uuid", { path: "db://assets/MainScene.scene" });
+    const mainInfo = await callTool("asset_query", { action: "uuid", path: "db://assets/MainScene.scene" });
     const mainUuid = mainInfo.uuid || mainInfo.data?.uuid;
     if (!mainUuid) {
         skip("dialog prevention: MainScene not found");
-        if (tempNodeUuid) await callTool("node_delete", { uuid: tempNodeUuid });
+        if (tempNodeUuid) await callTool("node_manage", { action: "delete", uuid: tempNodeUuid });
         return;
     }
 
-    const switchResult = await callTool("scene_open", { scene: mainUuid });
+    const switchResult = await callTool("scene_manage", { action: "open", scene: mainUuid });
     assert(switchResult.success === true,
         `saved dirty → scene_open auto-saves and switches (got: ${JSON.stringify(switchResult).slice(0, 120)})`);
 
@@ -1150,7 +998,7 @@ async function testDialogPrevention() {
     const deadline = Date.now() + SWITCH_TIMEOUT_MS;
     let switchedToMain = false;
     while (Date.now() < deadline) {
-        const now = await callTool("scene_get_current");
+        const now = await callTool("scene_manage", { action: "current" });
         if ((now.sceneName || now.data?.sceneName) === "MainScene") {
             switchedToMain = true;
             break;
@@ -1160,14 +1008,14 @@ async function testDialogPrevention() {
     assert(switchedToMain, "scene actually switched to MainScene after preflight auto-save");
 
     // 5. _regression に戻す
-    const regInfo = await callTool("asset_query_uuid", { path: TEST_SCENE_PATH });
+    const regInfo = await callTool("asset_query", { action: "uuid", path: TEST_SCENE_PATH });
     const regUuid = regInfo.uuid || regInfo.data?.uuid;
     if (regUuid) {
-        await callTool("scene_open", { scene: regUuid });
+        await callTool("scene_manage", { action: "open", scene: regUuid });
         // settle
         const deadline2 = Date.now() + SWITCH_TIMEOUT_MS;
         while (Date.now() < deadline2) {
-            const now = await callTool("scene_get_current");
+            const now = await callTool("scene_manage", { action: "current" });
             if ((now.sceneName || now.data?.sceneName) === "_regression") break;
             await new Promise((r) => setTimeout(r, 200));
         }
@@ -1175,11 +1023,11 @@ async function testDialogPrevention() {
 
     // クリーンアップ: 元の temp node は auto-save で _regression.scene に保存されてしまっているので、
     // 新規 load 後は uuid が変わっている。名前ベースで削除を試みる。
-    const finalHier = await callTool("scene_get_hierarchy");
+    const finalHier = await callTool("scene_manage", { action: "hierarchy" });
     const canvas = finalHier.hierarchy?.find((x) => x.name === "Canvas");
     const leftover = canvas?.children?.find((c) => c.name?.startsWith("DialogGuardTest_"));
     if (leftover?.uuid) {
-        await callTool("node_delete", { uuid: leftover.uuid });
+        await callTool("node_manage", { action: "delete", uuid: leftover.uuid });
     }
 
     // 6. untitled + dirty → scene_open でダイアログなしで切替（変更破棄）
@@ -1189,30 +1037,30 @@ async function testDialogPrevention() {
         // 新しいuntitledシーンに切り替わるまで待つ
         const createDeadline = Date.now() + 5000;
         while (Date.now() < createDeadline) {
-            const now = await callTool("scene_get_current");
+            const now = await callTool("scene_manage", { action: "current" });
             const name = now.sceneName || now.data?.sceneName || "";
             if (["scene-2d", "scene-3d", "Untitled", "NewScene", ""].includes(name)) break;
             await new Promise((r) => setTimeout(r, 200));
         }
 
         // undo 経由で dirty にする
-        await callTool("scene_begin_undo");
-        const tmpNode = await callTool("node_create", { name: "UntitledDirtyTest" });
+        await callTool("scene_undo", { action: "begin" });
+        const tmpNode = await callTool("node_manage", { action: "create", name: "UntitledDirtyTest" });
         if (tmpNode.uuid) {
-            await callTool("component_add", { uuid: tmpNode.uuid, componentType: "cc.UITransform" });
+            await callTool("component_manage", { action: "add", uuid: tmpNode.uuid, componentType: "cc.UITransform" });
             await callTool("component_set_property", {
                 uuid: tmpNode.uuid, componentType: "cc.UITransform",
                 property: "contentSize", value: { width: 100, height: 100 },
             });
         }
-        await callTool("scene_end_undo");
+        await callTool("scene_undo", { action: "end" });
 
         const dirtyCheck = await callTool("scene_query_dirty");
         const isDirty = dirtyCheck.dirty || dirtyCheck.data?.dirty;
 
         if (isDirty) {
             // untitled + dirty → scene_open で切替（ダイアログ自動応答で変更破棄）
-            const untitledSwitch = await callTool("scene_open", { scene: TEST_SCENE_PATH });
+            const untitledSwitch = await callTool("scene_manage", { action: "open", scene: TEST_SCENE_PATH });
             assert(untitledSwitch.success === true,
                 "untitled dirty → scene_open succeeds (dialog auto-discarded)");
         } else {
@@ -1222,15 +1070,15 @@ async function testDialogPrevention() {
 
         // scene_create で作成されたシーンファイルを削除
         if (newScene.path) {
-            await callTool("asset_delete", { path: newScene.path });
+            await callTool("asset_manage", { action: "delete", path: newScene.path });
         }
 
         // _regression に戻す
         if (regUuid) {
-            await callTool("scene_open", { scene: regUuid });
+            await callTool("scene_manage", { action: "open", scene: regUuid });
             const deadline3 = Date.now() + SWITCH_TIMEOUT_MS;
             while (Date.now() < deadline3) {
-                const now = await callTool("scene_get_current");
+                const now = await callTool("scene_manage", { action: "current" });
                 if ((now.sceneName || now.data?.sceneName) === "_regression") break;
                 await new Promise((r) => setTimeout(r, 200));
             }
@@ -1242,22 +1090,20 @@ async function testComponentSetPropertyV2() {
     console.log("\n── component_set_property v2 value forms ──");
 
     // setup: test node 作成 (Sprite + UITransform + Label つき)
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
     if (!canvasUuid) { skip("Canvas not found"); return; }
 
-    const created = await callTool("node_create", {
-        name: "V2SetPropertyTest",
+    const created = await callTool("node_manage", { action: "create", name: "V2SetPropertyTest",
         parent: canvasUuid,
-        components: ["cc.UITransform", "cc.Sprite", "cc.Label"],
-    });
+        components: ["cc.UITransform", "cc.Sprite", "cc.Label"], });
     if (!created.success) { skip("create test node failed"); return; }
     const uuid = created.uuid;
 
     try {
         // default の spriteFrame 候補を探す
         const SF_PATH = "db://internal/default_ui/default_btn/spriteFrame";
-        const sfQuery = await callTool("asset_query_uuid", { path: SF_PATH });
+        const sfQuery = await callTool("asset_query", { action: "uuid", path: SF_PATH });
         const sfUuid = sfQuery.uuid || sfQuery.data?.uuid;
 
         // 1. UUID 直渡し (後方互換)
@@ -1353,7 +1199,7 @@ async function testComponentSetPropertyV2() {
         }
 
     } finally {
-        await callTool("node_delete", { uuid });
+        await callTool("node_manage", { action: "delete", uuid });
     }
 }
 
@@ -1420,7 +1266,7 @@ async function testResourceApi() {
     assert(sceneHier.hierarchy !== undefined, "scene/hierarchy has hierarchy field");
 
     // 8. cocos://node/{uuid} — Canvas UUID で実体取得
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
     if (canvasUuid) {
         const nodeDump = await readResource(`cocos://node/${canvasUuid}`);
@@ -1638,17 +1484,17 @@ async function testReadConsole() {
 
 async function testUncoveredTools() {
     console.log("\n── uncovered tools (minimum 1 call) ──");
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
 
     // debug tools (editor-only, no preview required)
     const clearRes = await callTool("debug_clear_console");
     assert(clearRes.success === true || !clearRes._rpcError, "debug_clear_console");
 
-    const extInfo = await callTool("debug_get_extension_info", { name: "cocos-creator-mcp" });
+    const extInfo = await callTool("debug_extension", { action: "info", name: "cocos-creator-mcp" });
     assert(extInfo.success === true || !extInfo._rpcError, "debug_get_extension_info");
 
-    const searchLogs = await callTool("debug_search_project_logs", { keyword: "test", count: 5 });
+    const searchLogs = await callTool("debug_logs", { action: "search", pattern: "test", count: 5 });
     assert(searchLogs.success === true || !searchLogs._rpcError, "debug_search_project_logs");
 
     const devices = await callTool("debug_query_devices");
@@ -1666,40 +1512,40 @@ async function testUncoveredTools() {
         assert(queryComp.success === true || !queryComp._rpcError, "scene_query_component");
 
         // scene_set_parent (create two nodes, reparent, cleanup)
-        const pNode = await callTool("node_create", { name: "ParentTest", parent: canvasUuid });
-        const cNode = await callTool("node_create", { name: "ChildTest", parent: canvasUuid });
+        const pNode = await callTool("node_manage", { action: "create", name: "ParentTest", parent: canvasUuid });
+        const cNode = await callTool("node_manage", { action: "create", name: "ChildTest", parent: canvasUuid });
         if (pNode.uuid && cNode.uuid) {
             const sp = await callTool("scene_set_parent", { uuid: cNode.uuid, parentUuid: pNode.uuid });
             assert(sp.success === true || !sp._rpcError, "scene_set_parent");
-            await callTool("node_delete", { uuid: pNode.uuid });
+            await callTool("node_manage", { action: "delete", uuid: pNode.uuid });
         }
 
         // node layer setting (v2.0.0: node_set_layer 廃止、node_set_property に統合)
-        const layerNode = await callTool("node_create", { name: "LayerTest", parent: canvasUuid });
+        const layerNode = await callTool("node_manage", { action: "create", name: "LayerTest", parent: canvasUuid });
         if (layerNode.uuid) {
             const sl = await callTool("node_set_property", { uuid: layerNode.uuid, property: "layer", value: 1 << 25 });
             assert(sl.success === true || !sl._rpcError, "node_set_property(layer)");
-            await callTool("node_delete", { uuid: layerNode.uuid });
+            await callTool("node_manage", { action: "delete", uuid: layerNode.uuid });
         }
 
         // scene undo (begin + cancel)
-        const beginUndo = await callTool("scene_begin_undo");
+        const beginUndo = await callTool("scene_undo", { action: "begin" });
         assert(beginUndo.success === true || !beginUndo._rpcError, "scene_begin_undo");
-        const cancelUndo = await callTool("scene_cancel_undo");
+        const cancelUndo = await callTool("scene_undo", { action: "cancel" });
         assert(cancelUndo.success === true || !cancelUndo._rpcError, "scene_cancel_undo");
 
         // view tools (safe set + restore)
-        const origGrid = await callTool("view_query_grid_visible");
-        const setGrid = await callTool("view_set_grid_visible", { visible: true });
+        const origGrid = await callTool("view_settings", { action: "get_grid" });
+        const setGrid = await callTool("view_settings", { action: "set_grid", visible: true });
         assert(setGrid.success === true || !setGrid._rpcError, "view_set_grid_visible");
 
-        const focusRes = await callTool("view_focus_on_node", { uuid: canvasUuid });
+        const focusRes = await callTool("view_camera", { action: "focus_on_nodes", uuids: [canvasUuid] });
         assert(focusRes.success === true || !focusRes._rpcError, "view_focus_on_node");
 
-        const changeTool = await callTool("view_change_gizmo_tool", { tool: "move" });
+        const changeTool = await callTool("view_gizmo", { action: "set_tool", tool: "move" });
         assert(changeTool.success === true || !changeTool._rpcError, "view_change_gizmo_tool");
 
-        const resetView = await callTool("view_reset");
+        const resetView = await callTool("view_settings", { action: "reset" });
         assert(resetView.success === true || !resetView._rpcError, "view_reset");
     }
 
@@ -1708,11 +1554,11 @@ async function testUncoveredTools() {
     assert(scripts.success === true || !scripts._rpcError, "project_query_scripts");
 
     // asset tools
-    const missingAssets = await callTool("asset_query_missing");
+    const missingAssets = await callTool("asset_query", { action: "missing" });
     assert(missingAssets.success === true || !missingAssets._rpcError, "asset_query_missing");
 
     // preferences tools
-    const prefGet = await callTool("preferences_get", { protocol: "general", key: "language" });
+    const prefGet = await callTool("preferences_manage", { action: "get", protocol: "general", key: "language" });
     assert(prefGet.success === true || !prefGet._rpcError, "preferences_get");
 
     // scene_execute_script (read-only expression)
@@ -1731,7 +1577,7 @@ async function testUncoveredTools() {
 // テスト失敗等で残った (Missing Node) 等のゴミを一括削除
 async function cleanupOrphanNodes() {
     console.log("\n── cleanup: removing orphan nodes ──");
-    const hier = await callTool("scene_get_hierarchy");
+    const hier = await callTool("scene_manage", { action: "hierarchy" });
     if (!hier.success || !Array.isArray(hier.hierarchy)) {
         skip("cleanup: hierarchy not available");
         return;
@@ -1763,7 +1609,7 @@ async function cleanupOrphanNodes() {
     }
     let deleted = 0;
     for (const uuid of targets) {
-        const r = await callTool("node_delete", { uuid });
+        const r = await callTool("node_manage", { action: "delete", uuid });
         if (r.success) deleted++;
     }
     console.log(`  ✅ cleaned up ${deleted}/${targets.length} orphan nodes`);
@@ -2017,7 +1863,7 @@ const SOURCE_SCENE_PATH = "db://assets/MainScene.scene"; // クローン元の�
 async function ensureCleanTestScene() {
     console.log("\n── setup: ensure clean test scene ──");
 
-    const cur = await callTool("scene_get_current");
+    const cur = await callTool("scene_manage", { action: "current" });
     const curName = cur.sceneName || cur.data?.sceneName || "";
     const isUntitled = ["scene-2d", "scene-3d", "Untitled", "NewScene", ""].includes(curName);
 
@@ -2049,14 +1895,14 @@ async function ensureCleanTestScene() {
     // _regression.scene の準備:
     // scene_create の asset-db fallback が生成する最小 JSON は CC が拒否するため、
     // 既存の MainScene.scene を asset_copy で複製する方式にしている。
-    let info = await callTool("asset_query_uuid", { path: TEST_SCENE_PATH }).catch(() => ({}));
+    let info = await callTool("asset_query", { action: "uuid", path: TEST_SCENE_PATH }).catch(() => ({}));
     let sceneUuid = info.uuid || info.data?.uuid;
 
     if (!sceneUuid) {
         console.log(`  cloning ${SOURCE_SCENE_PATH} → ${TEST_SCENE_PATH}...`);
 
         // ソースの存在確認
-        const srcInfo = await callTool("asset_query_uuid", { path: SOURCE_SCENE_PATH }).catch(() => ({}));
+        const srcInfo = await callTool("asset_query", { action: "uuid", path: SOURCE_SCENE_PATH }).catch(() => ({}));
         const srcUuid = srcInfo.uuid || srcInfo.data?.uuid;
         if (!srcUuid) {
             console.error(`  ❌ source scene ${SOURCE_SCENE_PATH} not found; cannot create test scene`);
@@ -2064,14 +1910,14 @@ async function ensureCleanTestScene() {
             return false;
         }
 
-        const copied = await callTool("asset_copy", { source: SOURCE_SCENE_PATH, destination: TEST_SCENE_PATH });
+        const copied = await callTool("asset_manage", { action: "copy", source: SOURCE_SCENE_PATH, destination: TEST_SCENE_PATH });
         if (!copied.success) {
             console.error(`  ❌ failed to copy test scene: ${JSON.stringify(copied).slice(0, 200)}`);
             failed++;
             return false;
         }
 
-        info = await callTool("asset_query_uuid", { path: TEST_SCENE_PATH }).catch(() => ({}));
+        info = await callTool("asset_query", { action: "uuid", path: TEST_SCENE_PATH }).catch(() => ({}));
         sceneUuid = info.uuid || info.data?.uuid;
     }
 
@@ -2092,7 +1938,7 @@ async function ensureCleanTestScene() {
     let openAttempts = 0;
 
     while (Date.now() < deadline) {
-        const now = await callTool("scene_get_current");
+        const now = await callTool("scene_manage", { action: "current" });
         const name = now.sceneName || now.data?.sceneName || "";
         if (name === "_regression") {
             switched = true;
@@ -2100,7 +1946,7 @@ async function ensureCleanTestScene() {
         }
         // 切替されていなければ scene_open を再試行（idempotent）
         openAttempts++;
-        const opened = await callTool("scene_open", { scene: sceneUuid });
+        const opened = await callTool("scene_manage", { action: "open", scene: sceneUuid });
         if (opened.success !== true) {
             lastError = JSON.stringify(opened).slice(0, 200);
         }

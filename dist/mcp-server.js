@@ -17,7 +17,7 @@ const archive_1 = require("./archive");
 const MCP_PROTOCOL_VERSION = "2024-11-05";
 const SESSION_ID = `cocos-mcp-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
 /** ビルド時にコードベースのSHA256ハッシュが埋め込まれる */
-exports.BUILD_HASH = "8a33a5cdff9e";
+exports.BUILD_HASH = "bf15e4fb15a4";
 const MAX_GAME_LOG_BUFFER = 500;
 const _gameLogs = [];
 /** Access game preview log buffer from debug-tools */

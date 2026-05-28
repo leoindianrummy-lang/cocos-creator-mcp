@@ -6,6 +6,48 @@ import { takeEditorScreenshot } from "../screenshot";
 
 const EXT_NAME = "cocos-creator-mcp";
 
+/**
+ * v2.0.0: 値型プロパティの簡易オブジェクト形式 → Editor dump 形式への変換テーブル。
+ *
+ * これらは cc.Vec3 等のクラスインスタンスを使わずに `{x, y, z}` のような
+ * プレーンオブジェクトで設定できるようにするためのもの。
+ *
+ * Color は 0-255 / 0-1 のいずれかで来る可能性があるが、Cocos Editor の
+ * dump 形式が期待する単位 (0-255) で渡す前提。入力が 0-1 の場合は呼び出し側で
+ * 変換すること。
+ */
+const VALUE_TYPE_BUILDERS: Record<string, (v: any) => any> = {
+    "cc.Vec2": (v) => ({
+        value: { x: Number(v.x) || 0, y: Number(v.y) || 0 },
+        type: "cc.Vec2",
+    }),
+    "cc.Vec3": (v) => ({
+        value: { x: Number(v.x) || 0, y: Number(v.y) || 0, z: Number(v.z) || 0 },
+        type: "cc.Vec3",
+    }),
+    "cc.Vec4": (v) => ({
+        value: { x: Number(v.x) || 0, y: Number(v.y) || 0, z: Number(v.z) || 0, w: Number(v.w) || 0 },
+        type: "cc.Vec4",
+    }),
+    "cc.Color": (v) => ({
+        value: {
+            r: Number(v.r ?? 0),
+            g: Number(v.g ?? 0),
+            b: Number(v.b ?? 0),
+            a: Number(v.a ?? 255),
+        },
+        type: "cc.Color",
+    }),
+    "cc.Size": (v) => ({
+        value: {
+            // width/height でも x/y でも受け付ける
+            width: Number(v.width ?? v.x ?? 0),
+            height: Number(v.height ?? v.y ?? 0),
+        },
+        type: "cc.Size",
+    }),
+};
+
 export class ComponentTools implements ToolCategory {
     readonly categoryName = "component";
 
@@ -666,8 +708,19 @@ export class ComponentTools implements ToolCategory {
             return { value, type: "String" };
         }
 
-        // その他のオブジェクト（contentSize, color等の構造体）
+        // v2.0.0: cc.Vec2/Vec3/Vec4/Color/Size の値型を簡易オブジェクトから dump 生成
         if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+            try {
+                const nodeDump = await (Editor.Message.request as any)("scene", "query-node", nodeUuid);
+                if (nodeDump) {
+                    const propDump = this.resolveDumpPath(nodeDump, path);
+                    const propType = propDump?.type as string | undefined;
+                    const builder = VALUE_TYPE_BUILDERS[propType ?? ""];
+                    if (builder) return builder(value);
+                }
+            } catch (_e) { /* fallthrough */ }
+
+            // 既存挙動: プロパティ型が解決できない場合は各キーを {value: v} で wrap
             const wrapped: any = {};
             for (const [k, v] of Object.entries(value)) {
                 wrapped[k] = { value: v };

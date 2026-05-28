@@ -582,6 +582,14 @@ export class PrefabTools implements ToolCategory {
             // 4. フォント・SpriteFrame を Editor API 経由で設定（アセット依存追跡のため）
             await this._applyDefaultAssets(nodeUuid);
 
+            // 4b. v2.0.0: spec.properties を Editor API 経由で再設定する
+            //     buildNodeRecursive は scene-process 内で `comp[propName] = value` で代入するが、
+            //     これだと asset ref (UUID 文字列) が raw 文字列のまま .prefab に書き出され、
+            //     runtime で `{__uuid__, __expectedType__}` 形式に解決されないバグがある。
+            //     component_set_property 経由で再設定することで Editor が正しい dump 形式で
+            //     シリアライズしてくれる。値型 (Vec3/Color/Size) や enum 名なども透過的に解決される。
+            await this._reapplyPropertiesViaEditor(treeResult.data, cleanSpec);
+
             // 5. autoBind 実行 (旧4)
             let autoBindResult: any = null;
             if (autoBind) {
@@ -667,6 +675,49 @@ export class PrefabTools implements ToolCategory {
                     }
                 }
             } catch { /* skip nodes that can't be queried */ }
+        }
+    }
+
+    /**
+     * v2.0.0: spec.properties を Editor API (component_set_property) 経由で再設定する。
+     *
+     * buildNodeRecursive (scene.ts) は `comp[propName] = value` で代入するが、asset ref
+     * を含むプロパティは Editor シリアライザを通らないため .prefab JSON に raw UUID
+     * 文字列として書き出されてしまう (README Known Limitation 解消)。
+     *
+     * 本メソッドは nodeTree と spec を平行 walk して、各ノードの properties を再設定する。
+     * ComponentTools の buildDumpWithTypeInfo が型解決を行うため、UUID/path/{path,guid}/
+     * enum 名/Vec3/Color などをそのまま渡せる。
+     */
+    private async _reapplyPropertiesViaEditor(nodeTree: any, spec: any): Promise<void> {
+        if (!this._componentTools || !nodeTree?.uuid || !spec) return;
+
+        if (spec.properties && typeof spec.properties === "object") {
+            for (const [key, value] of Object.entries(spec.properties)) {
+                const dotIdx = key.lastIndexOf(".");
+                if (dotIdx < 0) continue;
+                const compType = key.substring(0, dotIdx);
+                const propName = key.substring(dotIdx + 1);
+                // contentSize は scene.ts 側で setContentSize() で適切に処理済みなのでスキップ
+                // (Editor 経由で再設定しても害はないが冗長)
+                if (propName === "contentSize") continue;
+                try {
+                    await this._componentTools.execute("component_set_property", {
+                        uuid: nodeTree.uuid,
+                        componentType: compType,
+                        property: propName,
+                        value,
+                    });
+                } catch (_e) {
+                    // 個別プロパティの失敗は無視して続行 (auto_bind 等で後から設定する場合あり)
+                }
+            }
+        }
+
+        const children = (nodeTree.children || []) as any[];
+        const specChildren = (spec.children || []) as any[];
+        for (let i = 0; i < Math.min(children.length, specChildren.length); i++) {
+            await this._reapplyPropertiesViaEditor(children[i], specChildren[i]);
         }
     }
 

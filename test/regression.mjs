@@ -1086,6 +1086,122 @@ async function testDialogPrevention() {
     }
 }
 
+async function testComponentSetPropertyV2() {
+    console.log("\n── component_set_property v2 value forms ──");
+
+    // setup: test node 作成 (Sprite + UITransform + Label つき)
+    const hier = await callTool("scene_get_hierarchy");
+    const canvasUuid = hier.hierarchy?.find((n) => n.name === "Canvas")?.uuid;
+    if (!canvasUuid) { skip("Canvas not found"); return; }
+
+    const created = await callTool("node_create", {
+        name: "V2SetPropertyTest",
+        parent: canvasUuid,
+        components: ["cc.UITransform", "cc.Sprite", "cc.Label"],
+    });
+    if (!created.success) { skip("create test node failed"); return; }
+    const uuid = created.uuid;
+
+    try {
+        // default の spriteFrame 候補を探す
+        const SF_PATH = "db://internal/default_ui/default_btn/spriteFrame";
+        const sfQuery = await callTool("asset_query_uuid", { path: SF_PATH });
+        const sfUuid = sfQuery.uuid || sfQuery.data?.uuid;
+
+        // 1. UUID 直渡し (後方互換)
+        if (sfUuid) {
+            const r = await callTool("component_set_property", {
+                uuid, componentType: "cc.Sprite", property: "spriteFrame", value: sfUuid,
+            });
+            assert(!r._rpcError, "spriteFrame: UUID 直渡し (legacy)");
+        } else {
+            skip("default spriteFrame UUID could not be resolved");
+        }
+
+        // 2. db:// path 直渡し (v2.0.0)
+        const r2 = await callTool("component_set_property", {
+            uuid, componentType: "cc.Sprite", property: "spriteFrame", value: SF_PATH,
+        });
+        assert(!r2._rpcError, "spriteFrame: 'db://...' path 受付");
+
+        // 3. {path} オブジェクト形式 (v2.0.0)
+        const r3 = await callTool("component_set_property", {
+            uuid, componentType: "cc.Sprite", property: "spriteFrame", value: { path: SF_PATH },
+        });
+        assert(!r3._rpcError, "spriteFrame: {path: 'db://...'} 受付");
+
+        // 4. {guid} オブジェクト形式 (v2.0.0)
+        if (sfUuid) {
+            const r4 = await callTool("component_set_property", {
+                uuid, componentType: "cc.Sprite", property: "spriteFrame", value: { guid: sfUuid },
+            });
+            assert(!r4._rpcError, "spriteFrame: {guid: '<uuid>'} 受付");
+        }
+
+        // 5. Color 簡易表記 (v2.0.0)
+        const rColor = await callTool("component_set_property", {
+            uuid, componentType: "cc.Sprite", property: "color",
+            value: { r: 255, g: 0, b: 0, a: 255 },
+        });
+        assert(!rColor._rpcError, "color: {r,g,b,a} 受付");
+
+        // 6. Size 簡易表記 (v2.0.0)
+        const rSize = await callTool("component_set_property", {
+            uuid, componentType: "cc.UITransform", property: "contentSize",
+            value: { width: 200, height: 100 },
+        });
+        assert(!rSize._rpcError, "contentSize: {width,height} 受付");
+
+        // 7. Vec3 (Node.position 経由 — ただし position は node 直プロパティなので注意)
+        //    cc.Vec2/Vec3 系は UITransform.anchorPoint 等で試すのが正攻法
+        const rVec2 = await callTool("component_set_property", {
+            uuid, componentType: "cc.UITransform", property: "anchorPoint",
+            value: { x: 0.5, y: 0.5 },
+        });
+        assert(!rVec2._rpcError, "anchorPoint: {x,y} 受付");
+
+        // 8. Enum 名 (v2.0.0) — Sprite.sizeMode は enum (SIMPLE/SLICED/TILED/FILLED/CUSTOM)
+        const rEnum = await callTool("component_set_property", {
+            uuid, componentType: "cc.Sprite", property: "sizeMode", value: "CUSTOM",
+        });
+        assert(!rEnum._rpcError, "sizeMode: 'CUSTOM' (enum 名) 受付");
+
+        // 9. Enum 数値 (後方互換)
+        const rEnumNum = await callTool("component_set_property", {
+            uuid, componentType: "cc.Sprite", property: "sizeMode", value: 0,
+        });
+        assert(!rEnumNum._rpcError, "sizeMode: 0 (enum 数値) 受付");
+
+        // 10. 不正な enum 名はエラー (v2.0.0)
+        const rEnumBad = await callTool("component_set_property", {
+            uuid, componentType: "cc.Sprite", property: "sizeMode", value: "NONEXISTENT_VALUE",
+        });
+        assert(rEnumBad._rpcError || rEnumBad.error || rEnumBad.success === false,
+            "sizeMode: 存在しない enum 名は error 返却");
+
+        // 11. 存在しない asset path はエラー (v2.0.0)
+        const rBadAsset = await callTool("component_set_property", {
+            uuid, componentType: "cc.Sprite", property: "spriteFrame",
+            value: "db://does/not/exist/foo.png",
+        });
+        assert(rBadAsset._rpcError || rBadAsset.error || rBadAsset.success === false,
+            "spriteFrame: 存在しない db:// path は error 返却");
+
+        // 12. 設定後の値検証 — Color が反映されたか query-node 経由で確認
+        const compsRes = await callTool("component_get_components", { uuid });
+        const spriteComp = (compsRes.components || []).find((c) => c.type === "Sprite");
+        if (spriteComp?.uuid) {
+            const dump = await callTool("component_get_info", { componentUuid: spriteComp.uuid });
+            const colorVal = dump.component?._color?.value || dump.component?.color?.value;
+            const r = colorVal?.r?.value ?? colorVal?.r;
+            assert(Number(r) === 255, `Sprite.color.r === 255 (got ${r})`);
+        }
+
+    } finally {
+        await callTool("node_delete", { uuid });
+    }
+}
+
 async function testReadConsole() {
     console.log("\n── read_console (v2.0.0) ──");
 
@@ -1731,6 +1847,7 @@ async function main() {
     await testStringifiedArgs();
     await testSceneCreate();
     await testDialogPrevention();
+    await testComponentSetPropertyV2();
     await testReadConsole();
     await testUncoveredTools();
     await cleanupOrphanNodes();

@@ -66,6 +66,7 @@ const ALL_TOOLS = [
     "component_add", "component_auto_bind", "component_get_available", "component_get_components",
     "component_get_info", "component_query_enum", "component_remove", "component_set_property",
     "debug_clear_console", "debug_execute_script", "debug_get_console_logs", "read_console",
+    "execute_editor_script",
     "debug_get_editor_info", "debug_get_extension_info", "debug_get_log_file_info",
     "debug_get_project_logs", "debug_list_extensions", "debug_list_messages",
     "debug_open_url", "debug_query_devices", "debug_search_project_logs", "debug_validate_scene",
@@ -1202,6 +1203,88 @@ async function testComponentSetPropertyV2() {
     }
 }
 
+async function testExecuteEditorScript() {
+    console.log("\n── execute_editor_script (v2.0.0) ──");
+
+    // 1. tools/list 登録
+    const tools = await callMcp("tools/list", {});
+    const names = (tools.result?.tools || []).map((t) => t.name);
+    assert(names.includes("execute_editor_script"), "registered: execute_editor_script");
+
+    // 2. 基本演算
+    const r1 = await callTool("execute_editor_script", { code: "return 1 + 1;" });
+    assert(r1.success === true && r1.result === 2, `1+1 returns 2 (got ${r1.result})`);
+
+    // 3. async / await サポート
+    const r2 = await callTool("execute_editor_script", {
+        code: "await new Promise(r => setTimeout(r, 30)); return 'done';",
+    });
+    assert(r2.success === true && r2.result === "done", `await works (got ${r2.result})`);
+
+    // 4. cc グローバルアクセス
+    const r3 = await callTool("execute_editor_script", { code: "return typeof cc;" });
+    assert(r3.success === true && r3.result === "object", "cc engine module accessible");
+
+    // 5. Editor.Message API アクセス
+    const r4 = await callTool("execute_editor_script", {
+        code: "const v = await Editor.Message.request('scene', 'query-current-scene'); return typeof v;",
+    });
+    assert(r4.success === true && (r4.result === "object" || r4.result === "string"),
+        "Editor.Message API accessible");
+
+    // 6. returnLogs キャプチャ
+    const r5 = await callTool("execute_editor_script", {
+        code: "console.log('test-eel-log-marker'); console.warn('test-eel-warn-marker'); return 'ok';",
+        returnLogs: true,
+    });
+    assert(r5.success === true && Array.isArray(r5.logs), "logs is array when returnLogs=true");
+    assert(r5.logs?.some((l) => l.includes("test-eel-log-marker")), "log marker captured");
+    assert(r5.logs?.some((l) => l.includes("test-eel-warn-marker")), "warn marker captured");
+
+    // 7. エラー catch
+    const r6 = await callTool("execute_editor_script", {
+        code: "throw new Error('test-eel-error-marker');",
+    });
+    assert(r6.success === false, "throw returns success=false");
+    assert(String(r6.error).includes("test-eel-error-marker"), "error message contains throw message");
+    assert(typeof r6.stack === "string", "stack trace included on error");
+
+    // 8. timeout
+    const r7 = await callTool("execute_editor_script", {
+        code: "await new Promise(() => {});", // 永久に解決しない
+        timeoutMs: 200,
+    });
+    assert(r7.success === false, "infinite await returns success=false");
+    assert(String(r7.error).toLowerCase().includes("timeout"), `error mentions timeout (got: ${r7.error})`);
+
+    // 9. cc.Node のシリアライズ
+    const r8 = await callTool("execute_editor_script", {
+        code: "const n = cc.find('Canvas'); return n;",
+    });
+    if (r8.success && r8.result) {
+        assert(r8.result.__node__ === true, "cc.Node is serialized as {__node__: true, ...}");
+        assert(typeof r8.result.uuid === "string", "serialized node has uuid");
+        assert(r8.result.name === "Canvas", `serialized node name is Canvas (got ${r8.result.name})`);
+    } else {
+        skip(`cc.find('Canvas') returned no node — scene may not have Canvas`);
+    }
+
+    // 10. 空 code はエラー
+    const r9 = await callTool("execute_editor_script", { code: "" });
+    assert(r9._rpcError || r9.error, "empty code returns error");
+
+    // 11. 循環参照を含む値が返ってもクラッシュしない
+    const r10 = await callTool("execute_editor_script", {
+        code: "const a = {}; a.self = a; return a;",
+    });
+    assert(r10.success === true, "circular reference does not crash");
+    assert(r10.result?.self === "[Circular]", `circular ref → '[Circular]' (got ${JSON.stringify(r10.result?.self)})`);
+
+    // 12. durationMs フィールド
+    assert(typeof r1.durationMs === "number" && r1.durationMs >= 0, "durationMs is present in success response");
+    assert(typeof r6.durationMs === "number" && r6.durationMs >= 0, "durationMs is present in error response");
+}
+
 async function testReadConsole() {
     console.log("\n── read_console (v2.0.0) ──");
 
@@ -1849,6 +1932,7 @@ async function main() {
     await testDialogPrevention();
     await testComponentSetPropertyV2();
     await testReadConsole();
+    await testExecuteEditorScript();
     await testUncoveredTools();
     await cleanupOrphanNodes();
 

@@ -75,14 +75,13 @@ const ALL_TOOLS = [
     "asset_manage", "asset_query",
     // builder (集約済): builder_manage
     "builder_manage",
-    // component: component_manage + 個別ツール
-    "component_manage", "component_auto_bind", "component_get_components",
-    "component_get_info", "component_set_property",
-    // debug: 集約済 + 残り個別
+    // component: component_manage + 個別ツール (v2: get_components / get_info は resource 化で削除)
+    "component_manage", "component_auto_bind", "component_set_property",
+    // debug: 集約済 + 残り個別 (v2: get_editor_info は cocos://editor/info に移行)
     "debug_logs", "debug_extension", "debug_record",
     "debug_clear_console", "debug_execute_script", "debug_get_console_logs",
     "read_console", "execute_editor_script",
-    "debug_get_editor_info", "debug_list_messages",
+    "debug_list_messages",
     "debug_open_url", "debug_query_devices", "debug_validate_scene",
     "debug_batch_screenshot", "debug_clear_code_cache", "debug_game_command",
     "debug_preview", "debug_screenshot", "debug_wait_compile",
@@ -91,15 +90,15 @@ const ALL_TOOLS = [
     "node_get_all", "node_get_info",
     "node_set_active", "node_set_layout", "node_set_property", "node_set_transform",
     "node_create_tree",
-    // prefab (一部集約: prefab_edit)
+    // prefab (一部集約 prefab_edit + v2: list/get_info は resource 化で削除)
     "prefab_edit", "prefab_create", "prefab_create_and_replace", "prefab_create_from_spec",
-    "prefab_duplicate", "prefab_get_info", "prefab_instantiate",
-    "prefab_list", "prefab_revert", "prefab_update", "prefab_validate",
+    "prefab_duplicate", "prefab_instantiate",
+    "prefab_revert", "prefab_update", "prefab_validate",
     // preferences (集約済): preferences_manage
     "preferences_manage",
-    // project (現状維持)
-    "project_find_asset", "project_get_asset_info", "project_get_engine_info",
-    "project_get_info", "project_get_settings", "project_query_scripts",
+    // project (v2: get_info / get_engine_info は resource 化で削除)
+    "project_find_asset", "project_get_asset_info",
+    "project_get_settings", "project_query_scripts",
     "project_refresh_assets", "project_set_settings",
     // refimage (集約済): refimage_manage / set / query
     "refimage_manage", "refimage_set", "refimage_query",
@@ -107,12 +106,12 @@ const ALL_TOOLS = [
     "scene_manage",
     // scene-advanced 集約済: clipboard / undo / array / reset
     "scene_clipboard", "scene_undo", "scene_array", "scene_reset",
-    // 残存 scene-advanced 個別ツール
+    // 残存 scene-advanced 個別ツール (v2: query_node / query_component / query_node_tree は resource 化で削除)
     "scene_create", "scene_save_as",
     "scene_execute_component_method", "scene_execute_script",
-    "scene_query_classes", "scene_query_component", "scene_query_component_has_script",
-    "scene_query_components", "scene_query_dirty", "scene_query_node",
-    "scene_query_node_tree", "scene_query_nodes_by_asset",
+    "scene_query_classes", "scene_query_component_has_script",
+    "scene_query_components", "scene_query_dirty",
+    "scene_query_nodes_by_asset",
     "scene_query_ready", "scene_query_scene_bounds",
     "scene_set_parent", "scene_soft_reload",
     // server (集約済): server_status

@@ -96,11 +96,6 @@ export class SceneAdvancedTools implements ToolCategory {
                 },
             },
             {
-                name: "scene_query_node_tree",
-                description: "Query the raw node tree from the editor (alternative to scene_get_hierarchy).",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
                 name: "scene_query_nodes_by_asset",
                 description: "Find all nodes that reference a given asset UUID.",
                 inputSchema: {
@@ -174,24 +169,6 @@ export class SceneAdvancedTools implements ToolCategory {
                 },
             },
             {
-                name: "scene_query_node",
-                description: "Get a full property dump of a node (all serialized data).",
-                inputSchema: {
-                    type: "object",
-                    properties: { uuid: { type: "string", description: "Node UUID" } },
-                    required: ["uuid"],
-                },
-            },
-            {
-                name: "scene_query_component",
-                description: "Get a full property dump of a component by its UUID.",
-                inputSchema: {
-                    type: "object",
-                    properties: { uuid: { type: "string", description: "Component UUID" } },
-                    required: ["uuid"],
-                },
-            },
-            {
                 name: "scene_query_scene_bounds",
                 description: "Get the bounding rect of the current scene.",
                 inputSchema: { type: "object", properties: {} },
@@ -217,10 +194,6 @@ export class SceneAdvancedTools implements ToolCategory {
                 case "scene_query_components": {
                     const comps = await (Editor.Message.request as any)("scene", "query-components", args.uuid);
                     return ok({ success: true, components: comps });
-                }
-                case "scene_query_node_tree": {
-                    const tree = await Editor.Message.request("scene", "query-node-tree");
-                    return ok({ success: true, tree });
                 }
                 case "scene_query_nodes_by_asset": {
                     const nodes = await (Editor.Message.request as any)("scene", "query-nodes-by-asset-uuid", args.assetUuid);
@@ -262,14 +235,6 @@ export class SceneAdvancedTools implements ToolCategory {
                         keepWorldTransform: args.keepWorldTransform || false,
                     });
                     return ok({ success: true });
-                case "scene_query_node": {
-                    const dump = await (Editor.Message.request as any)("scene", "query-node", args.uuid);
-                    return ok({ success: true, node: dump });
-                }
-                case "scene_query_component": {
-                    const dump = await (Editor.Message.request as any)("scene", "query-component", args.uuid);
-                    return ok({ success: true, component: dump });
-                }
                 case "scene_query_scene_bounds": {
                     const bounds = await (Editor.Message.request as any)("scene", "query-scene-bounds");
                     return ok({ success: true, bounds });

@@ -68,17 +68,6 @@ export class ComponentTools implements ToolCategory {
                 },
             },
             {
-                name: "component_get_components",
-                description: "Get all components on a node with their properties.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Node UUID (either uuid or nodeName required)" },
-                        nodeName: { type: "string", description: "Node name to find (alternative to uuid)" },
-                    },
-                },
-            },
-            {
                 name: "component_set_property",
                 description: "Set one or more properties on a component. For single: use property+value. For batch: use properties array. Use nodeName instead of uuid to find node by name. Set screenshot=true to capture editor screenshot after changes. Examples: Label.string, Label.fontSize, Sprite.color, UITransform.contentSize.",
                 inputSchema: {
@@ -104,17 +93,6 @@ export class ComponentTools implements ToolCategory {
                         screenshot: { type: "boolean", description: "If true, capture editor screenshot after setting properties and return the file path (default: false)" },
                     },
                     required: ["componentType"],
-                },
-            },
-            {
-                name: "component_get_info",
-                description: "Get detailed dump of a specific component by its UUID.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        componentUuid: { type: "string", description: "Component UUID (not node UUID)" },
-                    },
-                    required: ["componentUuid"],
                 },
             },
             {
@@ -153,8 +131,6 @@ export class ComponentTools implements ToolCategory {
         switch (toolName) {
             case "component_manage":
                 return this.handleManage(args);
-            case "component_get_components":
-                return this.getComponents(args.uuid);
             case "component_set_property": {
                 const properties = parseMaybeJson(args.properties);
                 let result: ToolResult;
@@ -179,12 +155,6 @@ export class ComponentTools implements ToolCategory {
                     }
                 }
                 return result;
-            }
-            case "component_get_info": {
-                try {
-                    const dump = await (Editor.Message.request as any)("scene", "query-component", args.componentUuid);
-                    return ok({ success: true, component: dump });
-                } catch (e: any) { return err(e.message || String(e)); }
             }
             case "component_auto_bind":
                 return this.autoBind(args.uuid, compType, args.force ?? false, args.mode ?? "fuzzy");

@@ -11,11 +11,6 @@ export class DebugTools implements ToolCategory {
     getTools(): ToolDefinition[] {
         return [
             {
-                name: "debug_get_editor_info",
-                description: "Get Cocos Creator editor information (version, platform, language).",
-                inputSchema: { type: "object", properties: {} },
-            },
-            {
                 name: "debug_list_messages",
                 description: "List available Editor messages for a given extension or built-in module.",
                 inputSchema: {
@@ -230,8 +225,6 @@ export class DebugTools implements ToolCategory {
     async execute(toolName: string, args: Record<string, any>): Promise<ToolResult> {
         try {
             switch (toolName) {
-                case "debug_get_editor_info":
-                    return this.getEditorInfo();
                 case "debug_list_messages":
                     return this.listMessages(args.target);
                 case "debug_execute_script":

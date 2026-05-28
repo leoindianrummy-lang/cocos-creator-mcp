@@ -30,14 +30,6 @@ export class PrefabTools implements ToolCategory {
     getTools(): ToolDefinition[] {
         return [
             {
-                name: "prefab_list",
-                description: "List all prefab files in the project.",
-                inputSchema: {
-                    type: "object",
-                    properties: {},
-                },
-            },
-            {
                 name: "prefab_create",
                 description: "Create a prefab from an existing node in the scene. The node remains in the scene.",
                 inputSchema: {
@@ -59,17 +51,6 @@ export class PrefabTools implements ToolCategory {
                         parent: { type: "string", description: "Parent node UUID (optional, defaults to scene root)" },
                     },
                     required: ["prefabUuid"],
-                },
-            },
-            {
-                name: "prefab_get_info",
-                description: "Get information about a prefab asset (name, path, UUID).",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        uuid: { type: "string", description: "Prefab asset UUID" },
-                    },
-                    required: ["uuid"],
                 },
             },
             {
@@ -163,14 +144,10 @@ export class PrefabTools implements ToolCategory {
 
     async execute(toolName: string, args: Record<string, any>): Promise<ToolResult> {
         switch (toolName) {
-            case "prefab_list":
-                return this.listPrefabs();
             case "prefab_create":
                 return this.createPrefab(args.uuid, args.path);
             case "prefab_instantiate":
                 return this.instantiatePrefab(args.prefabUuid, args.parent);
-            case "prefab_get_info":
-                return this.getPrefabInfo(args.uuid);
             case "prefab_update":
                 return this.updatePrefab(args.uuid);
             case "prefab_duplicate": {

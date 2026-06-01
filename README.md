@@ -111,7 +111,7 @@ curl http://127.0.0.1:3000/health
 
 ## Available Tools (~64)
 
-v2.0.0 集約後の構成。各カテゴリは `category_action` パターンで action を切り替える単一ツールに統合されています (旧 v1 の 166 ツールから 61% 削減)。
+The post-v2.0.0 layout. Each category is consolidated into a single tool that switches behavior via the `category_action` pattern (a 61% reduction from v1's 166 tools).
 
 <details>
 <summary><strong>Scene (12)</strong></summary>
@@ -133,14 +133,14 @@ v2.0.0 集約後の構成。各カテゴリは `category_action` パターンで
 - `view_settings(set_mode|get_mode|set_grid|get_grid|set_icon3d|get_icon3d|set_icon_size|get_icon_size|status|reset)`
 - `view_camera(focus_on_nodes|align_with_view|align_view_with_node)`
 
-Note: 3.8.x で未対応の Editor API は graceful no-op で動作 (`note` を返す)。
+Note: Editor APIs not supported on 3.8.x degrade to a graceful no-op (returning a `note`).
 </details>
 
 <details>
 <summary><strong>Node (10)</strong></summary>
 
 - `node_manage(create/delete/duplicate/move)`
-- `node_create_tree` — 1 コールで階層生成
+- `node_create_tree` — build a node hierarchy in a single call
 - `node_set_property`, `node_set_transform`, `node_set_active`, `node_set_layout`
 - `node_get_info`, `node_find_by_name`, `node_get_all`, `node_detect_type`
 </details>

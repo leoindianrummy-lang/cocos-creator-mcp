@@ -467,11 +467,23 @@ export class PrefabTools implements ToolCategory {
 
     private async closePrefab(save: boolean, sceneUuid?: string, force: boolean = false): Promise<ToolResult> {
         try {
-            // 1. Save prefab if requested
-            // prefab edit モード中は "current scene" = 編集中 Prefab なので save-scene は Prefab を保存する。
-            // ただし untitled フォールバックに当たった場合はダイアログ回避のためスキップする。
+            // 1. Save prefab if requested.
+            // In prefab-edit mode the "current scene" IS the prefab being edited, so a plain
+            // `save-scene` persists the .prefab asset. Because it is backed by a real asset (not an
+            // untitled scene) it does NOT raise the "Save changes?" modal.
+            //
+            // We must NOT route this through safeSaveScene(): the prefab-edit wrapper scene has an
+            // empty name (""), which is listed in scene-tools' UNTITLED_SCENE_NAMES, so
+            // safeSaveScene() classifies it as "untitled" and silently skips the save — which means
+            // every edit made in prefab-edit mode is lost on close.
             if (save) {
-                await safeSaveScene();
+                if (this._currentPrefabUuid) {
+                    await (Editor.Message.request as any)("scene", "save-scene");
+                } else {
+                    // Not opened via prefab_edit (e.g. double-clicked externally): fall back to the
+                    // guarded save so plain scenes keep their untitled-dialog protection.
+                    await safeSaveScene();
+                }
                 await new Promise(r => setTimeout(r, 500));
             }
 
@@ -502,6 +514,11 @@ export class PrefabTools implements ToolCategory {
                 await (Editor.Message.request as any)("scene", "open-scene", targetScene);
                 await new Promise(r => setTimeout(r, 1000));
             }
+
+            // Left prefab-edit mode: clear cached prefab state so a later non-prefab close does
+            // not mistakenly take the direct-save path above.
+            this._currentPrefabUuid = null;
+            this._pendingNestedPrefabs = [];
 
             return ok({ success: true, returnedToScene: targetScene });
         } catch (e: any) {
